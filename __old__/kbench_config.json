@@ -1,0 +1,172 @@
+{
+  "Cal_flipmirror_positions": [
+    {
+      "port": "/dev/ttyUSB"
+    },
+    {
+      "laser": "up"
+    },
+    {
+      "superk": "down"
+    }
+  ],
+  "calibration_files": [],
+  "MW_conex_positions": [
+    {
+      "port": "/dev/ttyUSB1"
+    },
+    {
+      "home": 0
+    },
+    {
+      "park": 140000
+    },
+    {
+      "max": 290000
+    },
+    {
+      "pos1": 0
+    },
+    {
+      "pos2": 0
+    },
+    {
+      "pos3": 0
+    },
+    {
+      "pos4": 0
+    },
+    {
+      "pos5": 0
+    },
+    {
+      "pos6": 0
+    },
+    {
+      "pos7": 0
+    },
+    {
+      "pos8": 0
+    },
+    {
+      "pos9": 0
+    }
+  ],
+  "MW_zaber_vertical_positions": [
+    {
+      "port": "/dev/ttyUSB1"
+    },
+    {
+      "device_number": 1
+    },
+    {
+      "home": 0
+    },
+    {
+      "park": 140000
+    },
+    {
+      "max": 290000
+    },
+    {
+      "pos1": 1000
+    },
+    {
+      "pos2": 2000
+    },
+    {
+      "pos3": 3000
+    },
+    {
+      "pos4": 4000
+    },
+    {
+      "pos5": 5000
+    },
+    {
+      "pos6": 6000
+    },
+    {
+      "pos7": 7000
+    },
+    {
+      "pos8": 8000
+    },
+    {
+      "pos9": 9000
+    }
+  ],
+  "MW_zaber_horizontal_positions": [
+    {
+      "port": "/dev/ttyUSB1"
+    },
+    {
+      "device_number": 2
+    },
+    {
+      "home": 0
+    },
+    {
+      "park": 140000
+    },
+    {
+      "max": 290000
+    },
+    {
+      "pos1": 1000
+    },
+    {
+      "pos2": 2000
+    },
+    {
+      "pos3": 3000
+    },
+    {
+      "pos4": 4000
+    },
+    {
+      "pos5": 5000
+    },
+    {
+      "pos6": 6000
+    },
+    {
+      "pos7": 7000
+    },
+    {
+      "pos8": 8000
+    },
+    {
+      "pos9": 9000
+    }
+  ],
+  "Cal_wheel_positions": [
+    {
+      "port": "/dev/ttyUSB0"
+    },
+    {
+      "pos1": 0
+    },
+    {
+      "pos2": 0
+    },
+    {
+      "pos3": 0
+    },
+    {
+      "pos4": 0
+    },
+    {
+      "pos5": 0
+    },
+    {
+      "pos6": 0
+    },
+    {
+      "pos7": 0
+    },
+    {
+      "pos8": 0
+    }
+  ]
+}

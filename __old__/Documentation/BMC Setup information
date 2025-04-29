@@ -1,0 +1,56 @@
+#+TITLE: Installation and computer setup notes for PHOTONICS
+#+AUTHOR: Frantz Martinache
+
+* Camera
+
+To be documented later.
+
+* Deformable mirror
+
+** Software download
+
+The SDK can be downloaded directly from the Boston Micromachines website:
+https://bostonmicromachines.com/DMSDK/BMC-DMSDK.zip
+
+It is because of this SDK that we are still tied to this somewhat "old" version of Linux Ubuntu.
+
+The successful installation of this addds stuff in the =/opt/Boston Micromachines/= directory.
+
+Also, you can check that a new Linux kernel module is indeed being loaded now:
+
+#+BEGIN_SRC bash
+lsmod | grep bmc
+#+END_SRC
+
+should output the following:
+
+=bmc_mdrv         16384  0=
+
+** Support configuration files
+
+Each BMC DM (it is also true for the four Asgard BMC mirrors) is refered to by a 11-digit serial number.
+
+For the PHOTONICS (ex KERNEL) bench, this number is: *27BW007#051*
+
+According to the BMC documentation, there are two files that came with the DM that must be dropped in the right locations:
+
+#+BEGIN_SRC bash
+
+sudo cp 27BW007#051.dm /opt/Boston\ Micromachines/Profiles/
+
+sudo cp LUT_27BW007#051.mat /opt/Boston\ Micromachines/Calibration/
+
+#+END_SRC
+
+From what I can tell, only the "profile" file is really mandatory. The other one might only be usable by people running Matlab?
+
+** Native Test scripts
+
+In the =/opt/Boston\ Micromachines/bin/= directory, there is a litle collection of command lines tools that one can use to double check successful communication with the DM. 
+
+#+BEGIN_SRC bash
+/opt/Boston\ Micromachines/bin/BmcExampleC -s 27BW007#051
+#+END_SRC
+
+Goes through a sequence of actuator activation.
+

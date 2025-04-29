@@ -1,0 +1,3 @@
+# Position Zab1 (vertical): 160000
+# Position Zab2 (vertical): 215000
+# Wheel 1: 236.2002
