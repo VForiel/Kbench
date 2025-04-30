@@ -1,2 +1,2 @@
-from classes import *
-from modules import *
+from .classes import *
+from .modules import *

@@ -10,8 +10,8 @@ class PupilMask():
         # To change if the Zaber is connected to another port
         zaber_session = serial.Serial("/dev/ttyUSB0", 115200, timeout=0.1)
 
-        self.zaber_h = Zaber(zaber_session, 1)
-        self.zaber_v = Zaber(zaber_session, 2)
+        self.zaber_v = Zaber(zaber_session, 1)
+        self.zaber_h = Zaber(zaber_session, 2)
 
     def move_right(self, pos, abs=False):
         """
