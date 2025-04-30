@@ -12,4 +12,5 @@ class DM:
 	def __init__(self, shm_DMptt = "/dev/shm/phot_DM.00.shm", 
 		shm_DMptt_cor = "/dev/shm/phot_DM.01.shm",
 		shm_DMptt_atmo = "/dev/shm/phot_DM.02.shm",
-		DMSerialNumber="27BW007#051"):    
+		DMSerialNumber="27BW007#051"
+        ""):    

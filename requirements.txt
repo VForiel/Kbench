@@ -1,0 +1,4 @@
+# Require python 3.8
+numpy
+pyserial
+newportESP
