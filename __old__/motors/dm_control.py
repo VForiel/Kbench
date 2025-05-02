@@ -13,4 +13,4 @@ class DM:
 		shm_DMptt_cor = "/dev/shm/phot_DM.01.shm",
 		shm_DMptt_atmo = "/dev/shm/phot_DM.02.shm",
 		DMSerialNumber="27BW007#051"
-        ""):    
+        ""):
