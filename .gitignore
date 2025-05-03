@@ -1,2 +1,3 @@
 /.kvenv/
 __pycache__
+/docs/_build

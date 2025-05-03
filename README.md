@@ -42,4 +42,20 @@ Requirements:
     from kbench import *
     ```
     You can now play with all the devices on the Kbench according to the (upcoming) documentation!
-    
+
+## 📚 Documentation
+
+The documentation should be available at the adress: [kbench.docs.foriel.xyz](http://kbench.docs.foriel.xyz).
+
+If you want to build the doc locally, once the project is setup (according to the instructions above):
+
+1. Go in the `docs` folder
+    ```bash
+    cd docs
+    ```
+1. Build the doc
+    ```bash
+    make html # Linux
+    .\make.bat html # Windows
+    ```
+Once the documentation is build, you can find it in the `docs/_build_` folder.
