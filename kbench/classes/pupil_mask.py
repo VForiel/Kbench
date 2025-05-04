@@ -10,14 +10,23 @@ class PupilMask():
     Class to control the mask wheel in the optical system.
     """
 
-    # Environment configuration file
-    CONFIG = yaml.safe_load(open("confi.yml", "r"))["pupil_mask"]
-
-    def __init__(self):
+    def __init__(
+            self,
+            # On which ports the components are conencted
+            zaber_port:str = "/dev/ttyUSB0",
+            newport_port:str = "/dev/ttyUSB1",
+            zaber_h_home:int = 189390, # Horizontal axis home position (steps)
+            zaber_v_home:int = 157602, # Vertical axis home position (steps)
+            newport_home:float = 56.3, # Angle of the pupil mask n°1 (degree)
+            ):
         
         # Initialize the serial connections for Zaber and Newport
-        zaber_session = serial.Serial(PupilMask.CONFIG["zaber_port"], 115200, timeout=0.1)
-        newport_session = serial.Serial(PupilMask.CONFIG["newport_port"], 921600, timeout=0.1)
+        zaber_session = serial.Serial(zaber_port, 115200, timeout=0.1)
+        newport_session = serial.Serial(newport_port, 921600, timeout=0.1)
+
+        self.zaber_h_home = zaber_h_home
+        self.zaber_v_home = zaber_v_home
+        self.newport_home = newport_home
 
         # Initialize the Zaber and Newport objects
         self.zaber_v = Zaber(zaber_session, 1)
@@ -83,9 +92,9 @@ class PupilMask():
         """
         Reset the mask wheel to the 4 vertical holes.
         """
-        self.newport.set(PupilMask.CONFIG["newport_home"] + 3*60) # Move to 4 vertical holes position
-        self.zaber_h.set(PupilMask.CONFIG["zaber_h_home"])
-        self.zaber_v.set(PupilMask.CONFIG["zaber_v_home"])
+        self.newport.set(self.newport_home + 3*60) # Move to 4 vertical holes position
+        self.zaber_h.set(self.zaber_h_home)
+        self.zaber_v.set(self.zaber_v_home)
     
 #==============================================================================
 # Zaber Classe

@@ -1,5 +1,4 @@
-# Test-bench-controls
----------------------
+# Kernel test bench controls
 
 This repo aim to provide a full set of tools to control all the devices on the Kernel-Nuller test bench.
 
