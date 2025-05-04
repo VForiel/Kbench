@@ -3,3 +3,4 @@ myst-parser
 furo
 linkify-it-py
 sphinx-copybutton
+pyyaml

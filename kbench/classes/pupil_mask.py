@@ -7,11 +7,26 @@ import serial
 class PupilMask():
     """
     Class to control the mask wheel in the optical system.
+
+    Attributes
+    ----------
+    zaber_h : Zaber
+        Instance of the Zaber class for controlling the horizontal motor.
+    zaber_v : Zaber
+        Instance of the Zaber class for controlling the vertical motor.
+    newport : Newport
+        Instance of the Newport class for controlling the mask wheel.
+    zaber_h_home : int
+        Home position for the horizontal motor (in steps).
+    zaber_v_home : int
+        Home position for the vertical motor (in steps).
+    newport_home : float
+        Angular home position for the first mask (in degrees).
     """
 
     def __init__(
             self,
-            # On which ports the components are conencted
+            # On which ports the components are connected
             zaber_port:str = "/dev/ttyUSB0",
             newport_port:str = "/dev/ttyUSB1",
             zaber_h_home:int = 189390, # Horizontal axis home position (steps)
@@ -37,6 +52,13 @@ class PupilMask():
     def move_right(self, pos, abs=False):
         """
         Move the mask to the right by a certain number of steps.
+
+        Parameters
+        ----------
+        pos : int
+            Number of steps to move.
+        abs : bool, optional
+            If True, move to an absolute position. Default is False.
         """
         if abs:
             return self.zaber_h.set(pos)
@@ -48,6 +70,13 @@ class PupilMask():
     def move_up(self, pos, abs=False):
         """
         Move the mask up by a certain number of steps.
+
+        Parameters
+        ----------
+        pos : int
+            Number of steps to move.
+        abs : bool, optional
+            If True, move to an absolute position. Default is False.
         """
         if abs:
             return self.zaber_v.set(pos)
@@ -59,6 +88,13 @@ class PupilMask():
     def rotate_clockwise(self, pos, abs=False):
         """
         Rotate the mask clockwise by a certain number of degrees.
+
+        Parameters
+        ----------
+        pos : float
+            Number of degrees to rotate.
+        abs : bool, optional
+            If True, rotate to an absolute position. Default is False.
         """
         if abs:
             return self.newport.set(pos)
@@ -74,6 +110,11 @@ class PupilMask():
     def aplly_mask(self, mask:int):
         """
         Rotate the mask wheel to the desired mask position.
+
+        Parameters
+        ----------
+        mask : int
+            Mask number to apply.
         """
         return self.newport.set(PupilMask.CONFIG["newport_home"] + (mask-1)*60) # Move to the desired mask position
         
@@ -82,6 +123,11 @@ class PupilMask():
     def get_pos(self):
         """
         Get the current position of the mask.
+
+        Returns
+        -------
+        tuple
+            Current positions of the horizontal and vertical motors.
         """
         return self.zaber_h.get(), self.zaber_v.get()
     
@@ -96,12 +142,21 @@ class PupilMask():
         self.zaber_v.set(self.zaber_v_home)
     
 #==============================================================================
-# Zaber Classe
+# Zaber Class
 #==============================================================================
 
 class Zaber():
     """
     Class to control the Zaber motors (axis).
+
+    Methods
+    -------
+    get()
+        Get the current position of the motor.
+    set(pos)
+        Move the motor to an absolute position.
+    add(pos)
+        Move the motor by a relative number of steps.
     """
 
     def __init__(self, session, id):
@@ -117,25 +172,58 @@ class Zaber():
     #--------------------------------------------------------------------------
 
     def get(self):
+        """
+        Get the current position of the motor.
+
+        Returns
+        -------
+        str
+            Current position of the motor.
+        """
         return self.send_command("get pos")
     
     #--------------------------------------------------------------------------
     
     def set(self, pos):
+        """
+        Move the motor to an absolute position.
+
+        Parameters
+        ----------
+        pos : int
+            Target position in steps.
+        """
         return self.send_command(f"move abs {pos}")
     
     #--------------------------------------------------------------------------
     
     def add(self, pos):
+        """
+        Move the motor by a relative number of steps.
+
+        Parameters
+        ----------
+        pos : int
+            Number of steps to move.
+        """
         return self.send_command(f"move rel {pos}")
     
-#===========================================================================
+#==============================================================================
 # Newport Class
-#===========================================================================
-        
+#==============================================================================
+
 class Newport():
     """
     Class to control the Newport motor (wheel).
+
+    Methods
+    -------
+    get()
+        Get the current angular position of the motor.
+    set(pos)
+        Rotate the motor to an absolute angular position.
+    add(pos)
+        Rotate the motor by a relative angle.
     """
 
     def __init__(self, session):
@@ -150,14 +238,38 @@ class Newport():
     #--------------------------------------------------------------------------
 
     def get(self):
+        """
+        Get the current angular position of the motor.
+
+        Returns
+        -------
+        str
+            Current angular position of the motor.
+        """
         return self.send_command("1TP?")
     
     #--------------------------------------------------------------------------
 
     def set(self, pos:int):
+        """
+        Rotate the motor to an absolute angular position.
+
+        Parameters
+        ----------
+        pos : int
+            Target angular position in degrees.
+        """
         return self.send_command(f"1PA{pos}")
     
     #--------------------------------------------------------------------------
 
     def add(self, pos:int):
+        """
+        Rotate the motor by a relative angle.
+
+        Parameters
+        ----------
+        pos : int
+            Angle to rotate in degrees.
+        """
         return self.send_command(f"1PR{pos}")
