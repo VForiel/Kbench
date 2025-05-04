@@ -5,21 +5,11 @@ This repo aim to provide a full set of tools to control all the devices on the K
 ## 🚀 Quickstart
 
 Requirements:
-- [Git](https://git-scm.com/)
-- [Python 3.11](https://www.python.org/)
+- [Python 3.8](https://www.python.org/)
 
-1. Clone the repo:
+0. (Recommanded) Create a virtual environment
     ```bash
-    git clone https://github.com/Kernel-Nulling/Test-bench-controls
-    ```
-    And move inside
-    ```
-    cd Test-bench-controls
-    ```
-
-2. (Recommanded) Create a virtual environment
-    ```bash
-    python3.11 -m venv .kvenv
+    python3.8 -m venv .kvenv
     ```
     and activate it
     ```bash
@@ -27,18 +17,18 @@ Requirements:
     .kvenv/Scripts/activate # Windows
     ```
 
-3. Install requirements
+1. Install the python module
     ```bash
-    pip install -r requirements.txt
+    pip install git+https://github.com/VForiel/Kbench
     ```
 
-4. Start a python instance
+2. Start a python instance
     ```bash
     python
     ```
     And import the kbench module
     ```python
-    from kbench import *
+    import kbench
     ```
     You can now play with all the devices on the Kbench according to the (upcoming) documentation!
 
