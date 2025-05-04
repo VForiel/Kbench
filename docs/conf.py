@@ -9,6 +9,7 @@
 project = 'Kbench'
 copyright = '2025, Photonics'
 author = 'Photonics'
+repository_url = 'https://github.com/Photonics/Kbench'  # Link to the Git repository
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

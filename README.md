@@ -34,7 +34,7 @@ Requirements:
 
 ## 📚 Documentation
 
-The documentation should be available at the adress: [kbench.docs.foriel.xyz](http://kbench.docs.foriel.xyz).
+The documentation should be available at the adress: [kbench.readthedocs.io](http://kbench.readthedocs.io).
 
 If you want to build the doc locally, once the project is setup (according to the instructions above):
 
