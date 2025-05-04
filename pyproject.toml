@@ -1,3 +1,23 @@
+[project]
+name = "Kbench"
+version = "0.1.0"
+description = "Kernel test bench controls"
+authors = [
+    {name = "Photonics", email = "vincent.foriel@gmail.com"},
+]
+dependencies = [
+    "numpy",
+    "pyserial",
+    "newportESP",
+]
+requires-python = ">=3.9"
+readme = "README.md"
+license = {text = "MIT"}
+
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
+
+
+[tool.pdm]
+distribution = true

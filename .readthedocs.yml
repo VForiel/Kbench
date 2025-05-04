@@ -10,5 +10,9 @@ build:
     - cat docs/conf.py
     - pdm run docs build $READTHEDOCS_OUTPUT/html
 
+python:
+  install:
+    - requirements: docs/requirements.txt
+
 sphinx:
   configuration: docs/conf.py
