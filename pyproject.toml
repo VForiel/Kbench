@@ -22,5 +22,5 @@ build-backend = "setuptools.build_meta"
 distribution = true
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = ["kbench*"]
