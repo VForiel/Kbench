@@ -116,7 +116,7 @@ class PupilMask():
         mask : int
             Mask number to apply.
         """
-        return self.newport.set(PupilMask.CONFIG["newport_home"] + (mask-1)*60) # Move to the desired mask position
+        return self.newport.set(self.newport_home + (mask-1)*60) # Move to the desired mask position
         
     #--------------------------------------------------------------------------
         
