@@ -1,6 +1,6 @@
 [project]
 name = "Kbench"
-version = "0.2.1"
+version = "0.2.2"
 description = "Kernel test bench controls"
 authors = [
     {name = "Photonics", email = "vincent.foriel@gmail.com"},
