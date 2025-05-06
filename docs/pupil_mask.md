@@ -44,7 +44,7 @@ Rotates the mask wheel clockwise by a certain number of degrees. If `abs=True`, 
 
 Alias: `rotate(pos, abs=False)`
 
-### `aplly_mask(mask)`
+### `apply_mask(mask)`
 Positions the mask wheel to the specified mask (by its number).
 
 ### `get_pos()`

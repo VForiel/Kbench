@@ -107,7 +107,7 @@ class PupilMask():
 
     #--------------------------------------------------------------------------
 
-    def aplly_mask(self, mask:int):
+    def apply_mask(self, mask:int):
         """
         Rotate the mask wheel to the desired mask position.
 
