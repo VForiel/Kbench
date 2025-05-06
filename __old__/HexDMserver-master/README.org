@@ -1,0 +1,34 @@
+#+TITLE: README file for the HexDMserver project
+#+AUTHOR: Frantz Martinache
+
+* Purpose
+
+Server driving the Hex 507 BMC deformable mirror (HexDM) originally part of the KERNEL project test-bench and now used for the PEPR Origins - PHOTONICS project. The intended architecture follows the approach used for the SCExAO instrument: the program operates like a server that monitors the state of several shared memory data (shm) structures that will be refered to as *channels*. A channel is an entry point for an external program to interact with the DM.
+
+Whenever one channel gets updated by an external program, the server combines the commands available on all channels (a simple addition) into what is the overall desired HexDM state, converts this state into a set of commands for the HexDM electronic driver and sends these commands to the driver.
+
+This code relies on the [[https://github.com/milk-org/ImageStreamIO][ImageStreamIO]] C library developed by O. Guyon that is a part of the [[https://github.com/milk-org][milk-org]] organisation. Most of my software projects in python (like [[http://github.com/fmartinache/xaosim][XAOSIM]]) use read/write access to shared memory.
+
+* Mechanics
+
+The HexDM is a segmented mirror: it is made of 169 individual segments that can each be driven by three separate actuators (3 * 169 = 507), therefore enabling control of piston and tip-tilt. The HexDM driver takes commands that address actuators individuallly.
+
+Each shm input channel will be a two dimensional floating point array of size 3 \times 169. The three columns are expected to be:
+
+|--------------+----------------+---------------------|
+| column index | type of value  | unit                |
+|--------------+----------------+---------------------|
+|            0 | piston         | nanometers (nm)     |
+|            1 | horizontal tip | milliradians (mrad) |
+|            2 | vertical tilt  | milliradians (mrad) |
+|--------------+----------------+---------------------|
+
+
+* Compilation & Installation
+
+Refer to the provided [[./Makefile][Makefile]] and ensure that you have all the required libraries installed. Assuming that all is in place, simply compile the code with:
+
+#+BEGIN_SRC bash
+  make
+  sudo make install
+#+END_SRC

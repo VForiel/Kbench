@@ -1,0 +1,11 @@
+# compiled c files
+*.o
+
+# emacs temporary save files
+*~
+
+# the compiled program
+HexDM_server
+
+# the DM log file
+log_HexDM.log

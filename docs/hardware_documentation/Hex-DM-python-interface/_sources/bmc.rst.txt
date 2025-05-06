@@ -1,0 +1,147 @@
+bmc module
+==========
+
+.. automodule:: bmc
+
+    DM Control API
+    --------------
+
+    .. autoclass:: BmcDm
+        :members:
+        :undoc-members:
+        :member-order: bysource
+	:titlesonly:
+
+    .. _error-codes:
+
+    Error Codes
+    -----------
+
+    .. data:: NO_ERR
+        0: All is well.
+    .. data:: ERR_UNKNOWN
+        1: General error.
+    .. data:: ERR_NO_HW
+        2: No drivers found.
+    .. data:: ERR_INIT_DRIVER
+        3: Error initializing driver.
+    .. data:: ERR_SERIAL_NUMBER
+        4: Invalid serial number.
+    .. data:: ERR_MALLOC
+        5: Error allocating memory
+    .. data:: ERR_INVALID_DRIVER_TYPE
+        6: Invalid driver type.
+    .. data:: ERR_INVALID_ACTUATOR_COUNT
+        7: Invalid Number of actuators.
+    .. data:: ERR_INVALID_LUT
+        8: Invalid mapping lookup table.
+    .. data:: ERR_ACTUATOR_ID
+        9: Incorrect actuator ID.
+    .. data:: ERR_OPENFILE
+        10: Error opening mapping.
+    .. data:: ERR_NOT_IMPLEMENTED
+        11: Function not implemented.
+    .. data:: ERR_TIMEOUT
+        12: Operation timed out.
+    .. data:: ERR_POKE
+        13: Error poking actuator.
+    .. data:: ERR_REGISTRY
+        14: Error in system registry.
+    .. data:: ERR_PCIE_REGWR
+        15: Error writing register.
+    .. data:: ERR_PCIE_REGRD
+        16: Error reading register.
+    .. data:: ERR_PCIE_BURST
+        17: Error writing burst array.
+    .. data:: ERR_X64_ONLY
+        18: Function Only available on 64-bit OS.
+    .. data:: ERR_PULSE_RANGE
+        19: Sync pulse out of range.
+    .. data:: ERR_INVALID_SEQUENCE
+        20: Invalid sequence.
+    .. data:: ERR_INVALID_SEQUENCE_RATE
+        21: Invalid sequence rate.
+    .. data:: ERR_INVALID_DITHER_WVFRM
+        22: Invalid dither waveform.
+    .. data:: ERR_INVALID_DITHER_GAIN
+        23: Invalid dither gain.
+    .. data:: ERR_INVALID_DITHER_RATE
+        24: Invalid dither rate.
+    .. data:: ERR_BADARG
+        25: Generic invalid argument.
+    .. data:: ERR_SEGMENT_ID
+        26: Incorrect segment ID.
+    .. data:: ERR_INVALID_CALIBRATION
+        27: Calibration table not set.
+    .. data:: ERR_OUT_OF_LUT_RANGE
+        28: Values not found in lookup table.
+    .. data:: ERR_NOT_OPEN
+        29: Tried to operate driver before opening.
+    .. data:: ERR_DRIVER_ALREADY_OPEN
+        30: Tried to open driver when already open.
+    .. data:: ERR_FILE_PERMISSIONS
+        31: Failed to read or write a file due to OS permissions.
+    .. data:: ERR_FILE_FORMAT
+        32: Error reading file, likely it was formatted incorrectly.
+    .. data:: ERR_USB_READ
+        33: Error reading USB.
+    .. data:: ERR_USB_WRITE
+        34: Error writing USB.
+    .. data:: ERR_USB_OTHER
+        35: Unknown USB error. Reserved: Name may change.
+    .. data:: ERR_INVALID_COEFFICIENTS
+        36: One or more mode coefficients exceeds the
+        calibrated stroke of the DM, or the coefficient
+        count exceeds the number of modes supported.
+
+    .. _log-levels:
+
+    Log Levels
+    ----------
+
+    .. data:: BMC_LOG_ALL
+        0: Log all messages
+    .. data:: BMC_LOG_TRACE
+        0: Log all messages
+    .. data:: BMC_LOG_DEBUG
+        1: Log all messages above debug level
+    .. data:: BMC_LOG_INFO
+        2: Log all messages above info level
+    .. data:: BMC_LOG_WARN
+        3: Log all messages above warning level
+    .. data:: BMC_LOG_ERROR
+        4: Log all messages above error level
+    .. data:: BMC_LOG_FATAL
+        5: Log only fatal error messages
+    .. data:: BMC_LOG_OFF
+        6: Turn off all log messages
+
+    Segment Axis
+    ------------
+
+    .. data:: DM_Piston
+        Piston
+    .. data:: DM_XTilt
+        Tilt in the X direction
+    .. data:: DM_YTilt
+        Tilt in the Y direction
+
+    Surface Options
+    ---------------
+
+    .. data:: DM_SURFACE_DEFAULT_OPTIONS
+        Default options (0)
+    .. data:: DM_SURFACE_ABSOLUTE_DEFLECTION
+        By default, the phase map is evaluated in
+        relative terms. That is, the mean value is
+        ignored and bias is determined internally. Set
+        this option to use absolute deflection values,
+        where 0nm is the minimum flat map for the
+        DM.
+    .. data:: DM_SURFACE_BEST_EFFORT
+        By default, an error is returned if one or more
+        points in the phase map exceeds the
+        calibrated stroke of the DM. Set this option to
+        clip the commands instead to make a best
+        effort at the requested shape.
+

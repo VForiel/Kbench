@@ -1,0 +1,575 @@
+
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+    <title>bmc module &#8212; DM-SDK 4.2.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/classic.css" />
+    
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Boston Micromachines DM-SDK Documentation" href="index.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Boston Micromachines DM-SDK Documentation"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">DM-SDK 4.2.1 documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">bmc module</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="module-bmc">
+<span id="bmc-module"></span><h1>bmc module<a class="headerlink" href="#module-bmc" title="Permalink to this heading">¶</a></h1>
+<section id="dm-control-api">
+<h2>DM Control API<a class="headerlink" href="#dm-control-api" title="Permalink to this heading">¶</a></h2>
+</section>
+<section id="error-codes">
+<span id="id1"></span><h2>Error Codes<a class="headerlink" href="#error-codes" title="Permalink to this heading">¶</a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.NO_ERR">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">NO_ERR</span></span><a class="headerlink" href="#bmc.NO_ERR" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">0:</span> <span class="pre">All</span> <span class="pre">is</span> <span class="pre">well.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_UNKNOWN">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_UNKNOWN</span></span><a class="headerlink" href="#bmc.ERR_UNKNOWN" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">1:</span> <span class="pre">General</span> <span class="pre">error.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_NO_HW">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_NO_HW</span></span><a class="headerlink" href="#bmc.ERR_NO_HW" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">2:</span> <span class="pre">No</span> <span class="pre">drivers</span> <span class="pre">found.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_INIT_DRIVER">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_INIT_DRIVER</span></span><a class="headerlink" href="#bmc.ERR_INIT_DRIVER" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">3:</span> <span class="pre">Error</span> <span class="pre">initializing</span> <span class="pre">driver.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_SERIAL_NUMBER">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_SERIAL_NUMBER</span></span><a class="headerlink" href="#bmc.ERR_SERIAL_NUMBER" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">4:</span> <span class="pre">Invalid</span> <span class="pre">serial</span> <span class="pre">number.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_MALLOC">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_MALLOC</span></span><a class="headerlink" href="#bmc.ERR_MALLOC" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">5:</span> <span class="pre">Error</span> <span class="pre">allocating</span> <span class="pre">memory</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_INVALID_DRIVER_TYPE">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_INVALID_DRIVER_TYPE</span></span><a class="headerlink" href="#bmc.ERR_INVALID_DRIVER_TYPE" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">6:</span> <span class="pre">Invalid</span> <span class="pre">driver</span> <span class="pre">type.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_INVALID_ACTUATOR_COUNT">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_INVALID_ACTUATOR_COUNT</span></span><a class="headerlink" href="#bmc.ERR_INVALID_ACTUATOR_COUNT" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">7:</span> <span class="pre">Invalid</span> <span class="pre">Number</span> <span class="pre">of</span> <span class="pre">actuators.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_INVALID_LUT">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_INVALID_LUT</span></span><a class="headerlink" href="#bmc.ERR_INVALID_LUT" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">8:</span> <span class="pre">Invalid</span> <span class="pre">mapping</span> <span class="pre">lookup</span> <span class="pre">table.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_ACTUATOR_ID">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_ACTUATOR_ID</span></span><a class="headerlink" href="#bmc.ERR_ACTUATOR_ID" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">9:</span> <span class="pre">Incorrect</span> <span class="pre">actuator</span> <span class="pre">ID.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_OPENFILE">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_OPENFILE</span></span><a class="headerlink" href="#bmc.ERR_OPENFILE" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">10:</span> <span class="pre">Error</span> <span class="pre">opening</span> <span class="pre">mapping.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_NOT_IMPLEMENTED">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_NOT_IMPLEMENTED</span></span><a class="headerlink" href="#bmc.ERR_NOT_IMPLEMENTED" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">11:</span> <span class="pre">Function</span> <span class="pre">not</span> <span class="pre">implemented.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_TIMEOUT">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_TIMEOUT</span></span><a class="headerlink" href="#bmc.ERR_TIMEOUT" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">12:</span> <span class="pre">Operation</span> <span class="pre">timed</span> <span class="pre">out.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_POKE">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_POKE</span></span><a class="headerlink" href="#bmc.ERR_POKE" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">13:</span> <span class="pre">Error</span> <span class="pre">poking</span> <span class="pre">actuator.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_REGISTRY">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_REGISTRY</span></span><a class="headerlink" href="#bmc.ERR_REGISTRY" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">14:</span> <span class="pre">Error</span> <span class="pre">in</span> <span class="pre">system</span> <span class="pre">registry.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_PCIE_REGWR">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_PCIE_REGWR</span></span><a class="headerlink" href="#bmc.ERR_PCIE_REGWR" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">15:</span> <span class="pre">Error</span> <span class="pre">writing</span> <span class="pre">register.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_PCIE_REGRD">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_PCIE_REGRD</span></span><a class="headerlink" href="#bmc.ERR_PCIE_REGRD" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">16:</span> <span class="pre">Error</span> <span class="pre">reading</span> <span class="pre">register.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_PCIE_BURST">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_PCIE_BURST</span></span><a class="headerlink" href="#bmc.ERR_PCIE_BURST" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">17:</span> <span class="pre">Error</span> <span class="pre">writing</span> <span class="pre">burst</span> <span class="pre">array.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_X64_ONLY">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_X64_ONLY</span></span><a class="headerlink" href="#bmc.ERR_X64_ONLY" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">18:</span> <span class="pre">Function</span> <span class="pre">Only</span> <span class="pre">available</span> <span class="pre">on</span> <span class="pre">64-bit</span> <span class="pre">OS.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_PULSE_RANGE">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_PULSE_RANGE</span></span><a class="headerlink" href="#bmc.ERR_PULSE_RANGE" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">19:</span> <span class="pre">Sync</span> <span class="pre">pulse</span> <span class="pre">out</span> <span class="pre">of</span> <span class="pre">range.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_INVALID_SEQUENCE">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_INVALID_SEQUENCE</span></span><a class="headerlink" href="#bmc.ERR_INVALID_SEQUENCE" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">20:</span> <span class="pre">Invalid</span> <span class="pre">sequence.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_INVALID_SEQUENCE_RATE">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_INVALID_SEQUENCE_RATE</span></span><a class="headerlink" href="#bmc.ERR_INVALID_SEQUENCE_RATE" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">21:</span> <span class="pre">Invalid</span> <span class="pre">sequence</span> <span class="pre">rate.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_INVALID_DITHER_WVFRM">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_INVALID_DITHER_WVFRM</span></span><a class="headerlink" href="#bmc.ERR_INVALID_DITHER_WVFRM" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">22:</span> <span class="pre">Invalid</span> <span class="pre">dither</span> <span class="pre">waveform.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_INVALID_DITHER_GAIN">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_INVALID_DITHER_GAIN</span></span><a class="headerlink" href="#bmc.ERR_INVALID_DITHER_GAIN" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">23:</span> <span class="pre">Invalid</span> <span class="pre">dither</span> <span class="pre">gain.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_INVALID_DITHER_RATE">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_INVALID_DITHER_RATE</span></span><a class="headerlink" href="#bmc.ERR_INVALID_DITHER_RATE" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">24:</span> <span class="pre">Invalid</span> <span class="pre">dither</span> <span class="pre">rate.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_BADARG">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_BADARG</span></span><a class="headerlink" href="#bmc.ERR_BADARG" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">25:</span> <span class="pre">Generic</span> <span class="pre">invalid</span> <span class="pre">argument.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_SEGMENT_ID">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_SEGMENT_ID</span></span><a class="headerlink" href="#bmc.ERR_SEGMENT_ID" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">26:</span> <span class="pre">Incorrect</span> <span class="pre">segment</span> <span class="pre">ID.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_INVALID_CALIBRATION">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_INVALID_CALIBRATION</span></span><a class="headerlink" href="#bmc.ERR_INVALID_CALIBRATION" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">27:</span> <span class="pre">Calibration</span> <span class="pre">table</span> <span class="pre">not</span> <span class="pre">set.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_OUT_OF_LUT_RANGE">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_OUT_OF_LUT_RANGE</span></span><a class="headerlink" href="#bmc.ERR_OUT_OF_LUT_RANGE" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">28:</span> <span class="pre">Values</span> <span class="pre">not</span> <span class="pre">found</span> <span class="pre">in</span> <span class="pre">lookup</span> <span class="pre">table.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_NOT_OPEN">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_NOT_OPEN</span></span><a class="headerlink" href="#bmc.ERR_NOT_OPEN" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">29:</span> <span class="pre">Tried</span> <span class="pre">to</span> <span class="pre">operate</span> <span class="pre">driver</span> <span class="pre">before</span> <span class="pre">opening.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_DRIVER_ALREADY_OPEN">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_DRIVER_ALREADY_OPEN</span></span><a class="headerlink" href="#bmc.ERR_DRIVER_ALREADY_OPEN" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">30:</span> <span class="pre">Tried</span> <span class="pre">to</span> <span class="pre">open</span> <span class="pre">driver</span> <span class="pre">when</span> <span class="pre">already</span> <span class="pre">open.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_FILE_PERMISSIONS">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_FILE_PERMISSIONS</span></span><a class="headerlink" href="#bmc.ERR_FILE_PERMISSIONS" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">31:</span> <span class="pre">Failed</span> <span class="pre">to</span> <span class="pre">read</span> <span class="pre">or</span> <span class="pre">write</span> <span class="pre">a</span> <span class="pre">file</span> <span class="pre">due</span> <span class="pre">to</span> <span class="pre">OS</span> <span class="pre">permissions.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_FILE_FORMAT">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_FILE_FORMAT</span></span><a class="headerlink" href="#bmc.ERR_FILE_FORMAT" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">32:</span> <span class="pre">Error</span> <span class="pre">reading</span> <span class="pre">file,</span> <span class="pre">likely</span> <span class="pre">it</span> <span class="pre">was</span> <span class="pre">formatted</span> <span class="pre">incorrectly.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_USB_READ">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_USB_READ</span></span><a class="headerlink" href="#bmc.ERR_USB_READ" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">33:</span> <span class="pre">Error</span> <span class="pre">reading</span> <span class="pre">USB.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_USB_WRITE">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_USB_WRITE</span></span><a class="headerlink" href="#bmc.ERR_USB_WRITE" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">34:</span> <span class="pre">Error</span> <span class="pre">writing</span> <span class="pre">USB.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_USB_OTHER">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_USB_OTHER</span></span><a class="headerlink" href="#bmc.ERR_USB_OTHER" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">35:</span> <span class="pre">Unknown</span> <span class="pre">USB</span> <span class="pre">error.</span> <span class="pre">Reserved:</span> <span class="pre">Name</span> <span class="pre">may</span> <span class="pre">change.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.ERR_INVALID_COEFFICIENTS">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">ERR_INVALID_COEFFICIENTS</span></span><a class="headerlink" href="#bmc.ERR_INVALID_COEFFICIENTS" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">36:</span> <span class="pre">One</span> <span class="pre">or</span> <span class="pre">more</span> <span class="pre">mode</span> <span class="pre">coefficients</span> <span class="pre">exceeds</span> <span class="pre">the</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">calibrated</span> <span class="pre">stroke</span> <span class="pre">of</span> <span class="pre">the</span> <span class="pre">DM,</span> <span class="pre">or</span> <span class="pre">the</span> <span class="pre">coefficient</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">count</span> <span class="pre">exceeds</span> <span class="pre">the</span> <span class="pre">number</span> <span class="pre">of</span> <span class="pre">modes</span> <span class="pre">supported.</span></span></dt>
+<dd></dd></dl>
+
+</section>
+<section id="log-levels">
+<span id="id2"></span><h2>Log Levels<a class="headerlink" href="#log-levels" title="Permalink to this heading">¶</a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.BMC_LOG_ALL">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">BMC_LOG_ALL</span></span><a class="headerlink" href="#bmc.BMC_LOG_ALL" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">0:</span> <span class="pre">Log</span> <span class="pre">all</span> <span class="pre">messages</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.BMC_LOG_TRACE">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">BMC_LOG_TRACE</span></span><a class="headerlink" href="#bmc.BMC_LOG_TRACE" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">0:</span> <span class="pre">Log</span> <span class="pre">all</span> <span class="pre">messages</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.BMC_LOG_DEBUG">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">BMC_LOG_DEBUG</span></span><a class="headerlink" href="#bmc.BMC_LOG_DEBUG" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">1:</span> <span class="pre">Log</span> <span class="pre">all</span> <span class="pre">messages</span> <span class="pre">above</span> <span class="pre">debug</span> <span class="pre">level</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.BMC_LOG_INFO">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">BMC_LOG_INFO</span></span><a class="headerlink" href="#bmc.BMC_LOG_INFO" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">2:</span> <span class="pre">Log</span> <span class="pre">all</span> <span class="pre">messages</span> <span class="pre">above</span> <span class="pre">info</span> <span class="pre">level</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.BMC_LOG_WARN">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">BMC_LOG_WARN</span></span><a class="headerlink" href="#bmc.BMC_LOG_WARN" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">3:</span> <span class="pre">Log</span> <span class="pre">all</span> <span class="pre">messages</span> <span class="pre">above</span> <span class="pre">warning</span> <span class="pre">level</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.BMC_LOG_ERROR">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">BMC_LOG_ERROR</span></span><a class="headerlink" href="#bmc.BMC_LOG_ERROR" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">4:</span> <span class="pre">Log</span> <span class="pre">all</span> <span class="pre">messages</span> <span class="pre">above</span> <span class="pre">error</span> <span class="pre">level</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.BMC_LOG_FATAL">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">BMC_LOG_FATAL</span></span><a class="headerlink" href="#bmc.BMC_LOG_FATAL" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">5:</span> <span class="pre">Log</span> <span class="pre">only</span> <span class="pre">fatal</span> <span class="pre">error</span> <span class="pre">messages</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.BMC_LOG_OFF">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">BMC_LOG_OFF</span></span><a class="headerlink" href="#bmc.BMC_LOG_OFF" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">6:</span> <span class="pre">Turn</span> <span class="pre">off</span> <span class="pre">all</span> <span class="pre">log</span> <span class="pre">messages</span></span></dt>
+<dd></dd></dl>
+
+</section>
+<section id="segment-axis">
+<h2>Segment Axis<a class="headerlink" href="#segment-axis" title="Permalink to this heading">¶</a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.DM_Piston">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">DM_Piston</span></span><a class="headerlink" href="#bmc.DM_Piston" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="bmc.Piston">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">Piston</span></span><a class="headerlink" href="#bmc.Piston" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.DM_XTilt">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">DM_XTilt</span></span><a class="headerlink" href="#bmc.DM_XTilt" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">Tilt</span> <span class="pre">in</span> <span class="pre">the</span> <span class="pre">X</span> <span class="pre">direction</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.DM_YTilt">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">DM_YTilt</span></span><a class="headerlink" href="#bmc.DM_YTilt" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">Tilt</span> <span class="pre">in</span> <span class="pre">the</span> <span class="pre">Y</span> <span class="pre">direction</span></span></dt>
+<dd></dd></dl>
+
+</section>
+<section id="surface-options">
+<h2>Surface Options<a class="headerlink" href="#surface-options" title="Permalink to this heading">¶</a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.DM_SURFACE_DEFAULT_OPTIONS">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">DM_SURFACE_DEFAULT_OPTIONS</span></span><a class="headerlink" href="#bmc.DM_SURFACE_DEFAULT_OPTIONS" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">Default</span> <span class="pre">options</span> <span class="pre">(0)</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.DM_SURFACE_ABSOLUTE_DEFLECTION">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">DM_SURFACE_ABSOLUTE_DEFLECTION</span></span><a class="headerlink" href="#bmc.DM_SURFACE_ABSOLUTE_DEFLECTION" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">By</span> <span class="pre">default,</span> <span class="pre">the</span> <span class="pre">phase</span> <span class="pre">map</span> <span class="pre">is</span> <span class="pre">evaluated</span> <span class="pre">in</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">relative</span> <span class="pre">terms.</span> <span class="pre">That</span> <span class="pre">is,</span> <span class="pre">the</span> <span class="pre">mean</span> <span class="pre">value</span> <span class="pre">is</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">ignored</span> <span class="pre">and</span> <span class="pre">bias</span> <span class="pre">is</span> <span class="pre">determined</span> <span class="pre">internally.</span> <span class="pre">Set</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">this</span> <span class="pre">option</span> <span class="pre">to</span> <span class="pre">use</span> <span class="pre">absolute</span> <span class="pre">deflection</span> <span class="pre">values,</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">where</span> <span class="pre">0nm</span> <span class="pre">is</span> <span class="pre">the</span> <span class="pre">minimum</span> <span class="pre">flat</span> <span class="pre">map</span> <span class="pre">for</span> <span class="pre">the</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">DM.</span></span></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="bmc.DM_SURFACE_BEST_EFFORT">
+<span class="sig-prename descclassname"><span class="pre">bmc.</span></span><span class="sig-name descname"><span class="pre">DM_SURFACE_BEST_EFFORT</span></span><a class="headerlink" href="#bmc.DM_SURFACE_BEST_EFFORT" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">By</span> <span class="pre">default,</span> <span class="pre">an</span> <span class="pre">error</span> <span class="pre">is</span> <span class="pre">returned</span> <span class="pre">if</span> <span class="pre">one</span> <span class="pre">or</span> <span class="pre">more</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">points</span> <span class="pre">in</span> <span class="pre">the</span> <span class="pre">phase</span> <span class="pre">map</span> <span class="pre">exceeds</span> <span class="pre">the</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">calibrated</span> <span class="pre">stroke</span> <span class="pre">of</span> <span class="pre">the</span> <span class="pre">DM.</span> <span class="pre">Set</span> <span class="pre">this</span> <span class="pre">option</span> <span class="pre">to</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">clip</span> <span class="pre">the</span> <span class="pre">commands</span> <span class="pre">instead</span> <span class="pre">to</span> <span class="pre">make</span> <span class="pre">a</span> <span class="pre">best</span></span></dt>
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">effort</span> <span class="pre">at</span> <span class="pre">the</span> <span class="pre">requested</span> <span class="pre">shape.</span></span></dt>
+<dd></dd></dl>
+
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/BMC-Icon.jpg" alt="Logo"/>
+            </a></p>
+  <div>
+    <h3><a href="index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">bmc module</a><ul>
+<li><a class="reference internal" href="#dm-control-api">DM Control API</a></li>
+<li><a class="reference internal" href="#error-codes">Error Codes</a><ul>
+<li><a class="reference internal" href="#bmc.NO_ERR"><code class="docutils literal notranslate"><span class="pre">NO_ERR</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_UNKNOWN"><code class="docutils literal notranslate"><span class="pre">ERR_UNKNOWN</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_NO_HW"><code class="docutils literal notranslate"><span class="pre">ERR_NO_HW</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_INIT_DRIVER"><code class="docutils literal notranslate"><span class="pre">ERR_INIT_DRIVER</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_SERIAL_NUMBER"><code class="docutils literal notranslate"><span class="pre">ERR_SERIAL_NUMBER</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_MALLOC"><code class="docutils literal notranslate"><span class="pre">ERR_MALLOC</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_INVALID_DRIVER_TYPE"><code class="docutils literal notranslate"><span class="pre">ERR_INVALID_DRIVER_TYPE</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_INVALID_ACTUATOR_COUNT"><code class="docutils literal notranslate"><span class="pre">ERR_INVALID_ACTUATOR_COUNT</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_INVALID_LUT"><code class="docutils literal notranslate"><span class="pre">ERR_INVALID_LUT</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_ACTUATOR_ID"><code class="docutils literal notranslate"><span class="pre">ERR_ACTUATOR_ID</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_OPENFILE"><code class="docutils literal notranslate"><span class="pre">ERR_OPENFILE</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_NOT_IMPLEMENTED"><code class="docutils literal notranslate"><span class="pre">ERR_NOT_IMPLEMENTED</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_TIMEOUT"><code class="docutils literal notranslate"><span class="pre">ERR_TIMEOUT</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_POKE"><code class="docutils literal notranslate"><span class="pre">ERR_POKE</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_REGISTRY"><code class="docutils literal notranslate"><span class="pre">ERR_REGISTRY</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_PCIE_REGWR"><code class="docutils literal notranslate"><span class="pre">ERR_PCIE_REGWR</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_PCIE_REGRD"><code class="docutils literal notranslate"><span class="pre">ERR_PCIE_REGRD</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_PCIE_BURST"><code class="docutils literal notranslate"><span class="pre">ERR_PCIE_BURST</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_X64_ONLY"><code class="docutils literal notranslate"><span class="pre">ERR_X64_ONLY</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_PULSE_RANGE"><code class="docutils literal notranslate"><span class="pre">ERR_PULSE_RANGE</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_INVALID_SEQUENCE"><code class="docutils literal notranslate"><span class="pre">ERR_INVALID_SEQUENCE</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_INVALID_SEQUENCE_RATE"><code class="docutils literal notranslate"><span class="pre">ERR_INVALID_SEQUENCE_RATE</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_INVALID_DITHER_WVFRM"><code class="docutils literal notranslate"><span class="pre">ERR_INVALID_DITHER_WVFRM</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_INVALID_DITHER_GAIN"><code class="docutils literal notranslate"><span class="pre">ERR_INVALID_DITHER_GAIN</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_INVALID_DITHER_RATE"><code class="docutils literal notranslate"><span class="pre">ERR_INVALID_DITHER_RATE</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_BADARG"><code class="docutils literal notranslate"><span class="pre">ERR_BADARG</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_SEGMENT_ID"><code class="docutils literal notranslate"><span class="pre">ERR_SEGMENT_ID</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_INVALID_CALIBRATION"><code class="docutils literal notranslate"><span class="pre">ERR_INVALID_CALIBRATION</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_OUT_OF_LUT_RANGE"><code class="docutils literal notranslate"><span class="pre">ERR_OUT_OF_LUT_RANGE</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_NOT_OPEN"><code class="docutils literal notranslate"><span class="pre">ERR_NOT_OPEN</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_DRIVER_ALREADY_OPEN"><code class="docutils literal notranslate"><span class="pre">ERR_DRIVER_ALREADY_OPEN</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_FILE_PERMISSIONS"><code class="docutils literal notranslate"><span class="pre">ERR_FILE_PERMISSIONS</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_FILE_FORMAT"><code class="docutils literal notranslate"><span class="pre">ERR_FILE_FORMAT</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_USB_READ"><code class="docutils literal notranslate"><span class="pre">ERR_USB_READ</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_USB_WRITE"><code class="docutils literal notranslate"><span class="pre">ERR_USB_WRITE</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_USB_OTHER"><code class="docutils literal notranslate"><span class="pre">ERR_USB_OTHER</span></code></a></li>
+<li><a class="reference internal" href="#bmc.ERR_INVALID_COEFFICIENTS"><code class="docutils literal notranslate"><span class="pre">ERR_INVALID_COEFFICIENTS</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#log-levels">Log Levels</a><ul>
+<li><a class="reference internal" href="#bmc.BMC_LOG_ALL"><code class="docutils literal notranslate"><span class="pre">BMC_LOG_ALL</span></code></a></li>
+<li><a class="reference internal" href="#bmc.BMC_LOG_TRACE"><code class="docutils literal notranslate"><span class="pre">BMC_LOG_TRACE</span></code></a></li>
+<li><a class="reference internal" href="#bmc.BMC_LOG_DEBUG"><code class="docutils literal notranslate"><span class="pre">BMC_LOG_DEBUG</span></code></a></li>
+<li><a class="reference internal" href="#bmc.BMC_LOG_INFO"><code class="docutils literal notranslate"><span class="pre">BMC_LOG_INFO</span></code></a></li>
+<li><a class="reference internal" href="#bmc.BMC_LOG_WARN"><code class="docutils literal notranslate"><span class="pre">BMC_LOG_WARN</span></code></a></li>
+<li><a class="reference internal" href="#bmc.BMC_LOG_ERROR"><code class="docutils literal notranslate"><span class="pre">BMC_LOG_ERROR</span></code></a></li>
+<li><a class="reference internal" href="#bmc.BMC_LOG_FATAL"><code class="docutils literal notranslate"><span class="pre">BMC_LOG_FATAL</span></code></a></li>
+<li><a class="reference internal" href="#bmc.BMC_LOG_OFF"><code class="docutils literal notranslate"><span class="pre">BMC_LOG_OFF</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#segment-axis">Segment Axis</a><ul>
+<li><a class="reference internal" href="#bmc.DM_Piston"><code class="docutils literal notranslate"><span class="pre">DM_Piston</span></code></a></li>
+<li><a class="reference internal" href="#bmc.Piston"><code class="docutils literal notranslate"><span class="pre">Piston</span></code></a></li>
+<li><a class="reference internal" href="#bmc.DM_XTilt"><code class="docutils literal notranslate"><span class="pre">DM_XTilt</span></code></a></li>
+<li><a class="reference internal" href="#bmc.DM_YTilt"><code class="docutils literal notranslate"><span class="pre">DM_YTilt</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#surface-options">Surface Options</a><ul>
+<li><a class="reference internal" href="#bmc.DM_SURFACE_DEFAULT_OPTIONS"><code class="docutils literal notranslate"><span class="pre">DM_SURFACE_DEFAULT_OPTIONS</span></code></a></li>
+<li><a class="reference internal" href="#bmc.DM_SURFACE_ABSOLUTE_DEFLECTION"><code class="docutils literal notranslate"><span class="pre">DM_SURFACE_ABSOLUTE_DEFLECTION</span></code></a></li>
+<li><a class="reference internal" href="#bmc.DM_SURFACE_BEST_EFFORT"><code class="docutils literal notranslate"><span class="pre">DM_SURFACE_BEST_EFFORT</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div>
+    <h4>Previous topic</h4>
+    <p class="topless"><a href="index.html"
+                          title="previous chapter">Boston Micromachines DM-SDK Documentation</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/bmc.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Boston Micromachines DM-SDK Documentation"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">DM-SDK 4.2.1 documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">bmc module</a></li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2017-2022, Boston Micromachines.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 5.3.0.
+    </div>
+  </body>
+</html>

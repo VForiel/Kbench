@@ -1,0 +1,180 @@
+
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+    <title>Boston Micromachines DM-SDK Documentation &#8212; DM-SDK 4.2.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/classic.css" />
+    
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="bmc module" href="bmc.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="bmc.html" title="bmc module"
+             accesskey="N">next</a> |</li>
+        <li class="nav-item nav-item-0"><a href="#">DM-SDK 4.2.1 documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Boston Micromachines DM-SDK Documentation</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="boston-micromachines-dm-sdk-documentation">
+<h1>Boston Micromachines DM-SDK Documentation<a class="headerlink" href="#boston-micromachines-dm-sdk-documentation" title="Permalink to this heading">¶</a></h1>
+<p>The Bostom Micromachines Deformable Mirror (DM) Software Development Kit
+(SDK) provides a common interface to all BMC products. It allows users to
+write one code base that can be used with any product.</p>
+<p>BMC DMs are supplied with a variety of drive electronics (DE).</p>
+<p>One DM per DE is supported. One DE per hardware interface is supported.</p>
+<p>The DM-SDK supports continuous face-sheet and segmented DMs from BMC. The
+number of actuators is considered the “size” of the DM. Individual actuators
+can be addressed for any mirror, with indexes from 0 to size-1.</p>
+<p>Actuator values are passed to the SDK as a double float value in the range
+[0,1].
+This value is internally converted to the nearest suitable 16-bit driver
+DAC value.</p>
+<p>All actuators may be set at a time, or individually. See
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">send_data</span></code> and <code class="xref py py-meth docutils literal notranslate"><span class="pre">poke</span></code>.</p>
+<section id="open-loop-segment-control">
+<h2>Open Loop Segment Control<a class="headerlink" href="#open-loop-segment-control" title="Permalink to this heading">¶</a></h2>
+<p>There is additional functionality for segmented DMs (SLMs). Some SLMs
+have more than one actuator per segment. Segments can be manipulated,
+with open loop control over all actuators for the segment. Segments are
+indexed from 0 and may not map sequentially to actuator indexes. For these
+functions, values are passed in user units (e.g. nm) and are converted
+internally to the nearest suitable 16-bit driver DAC values for the
+appropriate actuators.</p>
+<p>See <code class="xref py py-meth docutils literal notranslate"><span class="pre">set_segment</span></code>, <code class="xref py py-meth docutils literal notranslate"><span class="pre">get_segment_range</span></code></p>
+</section>
+<section id="basic-operation">
+<h2>Basic Operation<a class="headerlink" href="#basic-operation" title="Permalink to this heading">¶</a></h2>
+<p>To use the API, import the <a class="reference internal" href="bmc.html#module-bmc" title="bmc"><code class="xref py py-mod docutils literal notranslate"><span class="pre">bmc</span></code></a> module.</p>
+<p>In order to apply voltage to the DM the following sequence of function
+calls are required:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dm</span> <span class="o">=</span> <span class="n">bmc</span><span class="o">.</span><span class="n">BmcDm</span><span class="p">()</span>
+<span class="n">dm</span><span class="o">.</span><span class="n">open_dm</span><span class="p">(</span><span class="s1">&#39;MultiUSB000&#39;</span><span class="p">)</span>
+<span class="n">dm</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">dataArray</span><span class="p">)</span>
+<span class="n">dm</span><span class="o">.</span><span class="n">close_dm</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>This sequence nearly encompasses the minimum calls needed by the BMC level
+API. Other funtionality is available through the hardware specific APIs.
+The SDK was designed such that once the driver connection is opened, the
+DM struct can be used to call any level function. However, care must be
+taken to pass the appropriate input arguments, since the BMC level commands
+manage many of the data types for the user. The DM struct should not be
+modified by the user. Other than the actuator count
+and driver type, the DM struct is intended to be opaque.</p>
+<p>All functions return an error code that should be checked. Use
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">error_string</span></code> to get a readable error message
+from the code.</p>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="bmc.html">bmc module</a></li>
+</ul>
+</div>
+</section>
+</section>
+<section id="indices-and-tables">
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this heading">¶</a></h1>
+<ul class="simple">
+<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
+<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
+</ul>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="#">
+              <img class="logo" src="_static/BMC-Icon.jpg" alt="Logo"/>
+            </a></p>
+  <div>
+    <h3><a href="#">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Boston Micromachines DM-SDK Documentation</a><ul>
+<li><a class="reference internal" href="#open-loop-segment-control">Open Loop Segment Control</a></li>
+<li><a class="reference internal" href="#basic-operation">Basic Operation</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
+</ul>
+
+  </div>
+  <div>
+    <h4>Next topic</h4>
+    <p class="topless"><a href="bmc.html"
+                          title="next chapter">bmc module</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/index.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="bmc.html" title="bmc module"
+             >next</a> |</li>
+        <li class="nav-item nav-item-0"><a href="#">DM-SDK 4.2.1 documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Boston Micromachines DM-SDK Documentation</a></li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2017-2022, Boston Micromachines.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 5.3.0.
+    </div>
+  </body>
+</html>

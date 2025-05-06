@@ -1,0 +1,81 @@
+.. DM-SDK documentation master file, created by
+   sphinx-quickstart on Fri Apr 21 16:47:09 2017.
+   You can adapt this file completely to your liking, but it should at least
+   contain the root `toctree` directive.
+
+Boston Micromachines DM-SDK Documentation
+=========================================
+
+The Bostom Micromachines Deformable Mirror (DM) Software Development Kit
+(SDK) provides a common interface to all BMC products. It allows users to
+write one code base that can be used with any product.
+
+BMC DMs are supplied with a variety of drive electronics (DE).
+
+One DM per DE is supported. One DE per hardware interface is supported.
+
+The DM-SDK supports continuous face-sheet and segmented DMs from BMC. The
+number of actuators is considered the "size" of the DM. Individual actuators
+can be addressed for any mirror, with indexes from 0 to size-1.
+
+Actuator values are passed to the SDK as a double float value in the range
+[0,1].
+This value is internally converted to the nearest suitable 16-bit driver
+DAC value.
+
+All actuators may be set at a time, or individually. See
+:meth:`send_data <bmc.BmcDm.send_data>` and :meth:`poke <bmc.BmcDm.poke>`.
+
+Open Loop Segment Control
+-------------------------
+There is additional functionality for segmented DMs (SLMs). Some SLMs
+have more than one actuator per segment. Segments can be manipulated,
+with open loop control over all actuators for the segment. Segments are
+indexed from 0 and may not map sequentially to actuator indexes. For these
+functions, values are passed in user units (e.g. nm) and are converted
+internally to the nearest suitable 16-bit driver DAC values for the
+appropriate actuators.
+
+See :meth:`set_segment <bmc.BmcDm.set_segment>`, :meth:`get_segment_range <bmc.BmcDm.get_segment_range>`
+
+Basic Operation
+---------------
+To use the API, import the :mod:`bmc` module.
+
+In order to apply voltage to the DM the following sequence of function
+calls are required:
+
+.. code-block:: python
+
+    dm = bmc.BmcDm()
+    dm.open_dm('MultiUSB000')
+    dm.send_data(dataArray)
+    dm.close_dm()
+
+This sequence nearly encompasses the minimum calls needed by the BMC level
+API. Other funtionality is available through the hardware specific APIs.
+The SDK was designed such that once the driver connection is opened, the
+DM struct can be used to call any level function. However, care must be
+taken to pass the appropriate input arguments, since the BMC level commands
+manage many of the data types for the user. The DM struct should not be
+modified by the user. Other than the actuator count
+and driver type, the DM struct is intended to be opaque.
+
+All functions return an error code that should be checked. Use
+:meth:`error_string <bmc.BmcDm.error_string>` to get a readable error message
+from the code.
+
+
+.. toctree::
+   :maxdepth: 4
+   :caption: Contents:
+   :titlesonly:
+
+   bmc
+
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`search`
