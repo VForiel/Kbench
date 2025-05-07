@@ -1,3 +1,5 @@
 /.kvenv/
-__pycache__
-/docs/_build
+__pycache__/
+/docs/_build/
+*.egg-info/
+/build/

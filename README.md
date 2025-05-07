@@ -5,9 +5,9 @@ This repo aim to provide a full set of tools to control all the devices on the K
 ## 🚀 Quickstart
 
 Requirements:
-- [Python 3.9](https://www.python.org/) or higher
+- [Python 3.8](https://www.python.org/) (or higher, but not tested)
 
-0. (Recommanded) Create a virtual environment
+0. (Recommended) Create a virtual environment
     ```bash
     python3.8 -m venv .kvenv
     ```

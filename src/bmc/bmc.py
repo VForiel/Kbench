@@ -5,25 +5,14 @@
 # the SWIG interface file instead.
 
 from sys import version_info as _swig_python_version_info
-
 if _swig_python_version_info < (2, 7, 0):
     raise RuntimeError("Python 2.7 or later required")
 
 # Import the low-level C/C++ module
-from sys import platform
-
-if platform == "win32":
-    if __package__ or "." in __name__:
-        from .compiled.windows import _bmc
-    else:
-        import compiled.windows._bmc as _bmc
-elif platform == "linux" or platform == "linux2":
-    if __package__ or "." in __name__:
-        from .compiled.linux import _bmc
-    else:
-        import compiled.linux._bmc as _bmc
-elif platform == "darwin":
-    raise RuntimeError("macOS is not supported")
+if __package__ or "." in __name__:
+    from . import _bmc
+else:
+    import _bmc
 
 try:
     import builtins as __builtin__
