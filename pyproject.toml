@@ -1,6 +1,6 @@
 [project]
 name = "Kbench"
-version = "0.3.0"
+version = "0.3.1"
 description = "Kernel test bench controls"
 authors = [
     {name = "Photonics", email = "vincent.foriel@gmail.com"},
@@ -23,4 +23,4 @@ distribution = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["kbench*","bmc*"]
+include = ["kbench*"]
