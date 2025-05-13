@@ -31,7 +31,7 @@ Once initialized, an instance of `PupilMask` contains the following attributes:
 - **`zaber_v_home`** (`int`): Reference position for the vertical Zaber motor.
 - **`newport_home`** (`float`): Reference position for the Newport motor.
 
-## Main Methods
+## Methods
 
 ### `move_right(pos, abs=False)`
 Moves the mask to the right by a certain number of steps. If `abs=True`, the movement is absolute.

@@ -1,3 +1,5 @@
+import numpy as np
+import bmc
 
 class DM():
     """
@@ -5,15 +7,13 @@ class DM():
     """
 
     def __init__(self):
+        dm_serial_number = "27BW007#051"
+
+        self.dm = bmc.BmcDm()
+        self.dm.open_dm(dm_serial_number)
+        self.dm.load_calibration_file("")
+
         self.segments = [Segment(self, i) for i in range(169)]
-
-    #--------------------------------------------------------------------------
-
-    def send_command(self, command):
-        """
-        Send a command to the DM.
-        """
-        ...
 
     #--------------------------------------------------------------------------
 
@@ -45,13 +45,14 @@ class DM():
 #==============================================================================
 # Segment class
 #==============================================================================
+
 class Segment():
     """
     Class to represent a segment of the deformable mirror (DM).
     """
 
-    def __init__(self, DM, id:int):
-        self.DM = DM
+    def __init__(self, dm:DM, id:int):
+        self.dm = dm
         self.id = id
 
     #--------------------------------------------------------------------------
@@ -60,6 +61,7 @@ class Segment():
         """
         Get the piston value of the segment.
         """
+        print("get_piston not implemented")
         ...
 
     #--------------------------------------------------------------------------
@@ -68,7 +70,7 @@ class Segment():
         """
         Set the piston value of the segment.
         """
-        ...
+        return self.dm.set_segment(self.id, value, 0, 0, True, True)
 
     #--------------------------------------------------------------------------
 
@@ -76,6 +78,7 @@ class Segment():
         """
         Get the tip value of the segment.
         """
+        print("get_tip not implemented")
         ...
 
     #--------------------------------------------------------------------------
@@ -84,7 +87,7 @@ class Segment():
         """
         Set the tip value of the segment.
         """
-        ...
+        return self.dm.set_segment(self.id, 0, value, 0, True, True)
 
     #--------------------------------------------------------------------------
 
@@ -92,6 +95,7 @@ class Segment():
         """
         Get the tilt value of the segment.
         """
+        print("get_tilt not implemented")
         ...
 
     #--------------------------------------------------------------------------
@@ -100,4 +104,20 @@ class Segment():
         """
         Set the tilt value of the segment.
         """
-        ...
+        return self.dm.set_segment(self.id, 0, 0, value, True, True)
+
+    def ptt_to_dac(self, piston, tip, tilt):
+        """
+        Convert piston, tip, and tilt values to DAC values.
+        """
+
+        # TODO
+        raise NotImplementedError("ptt_to_dac not implemented")
+
+        a0 = 218.75
+        again = 4000.0
+        sq3_2 = np.sqrt(3/2)
+        
+        a_left  = piston + a0 * sq3_2 * tilt + a0/2 * tip;
+        a_top   = piston - a0 * tip;
+        a_right = piston - a0 * sq3_2 * tilt + a0/2 * tip;
