@@ -1,6 +1,5 @@
 # pdm
 /.venv/
-/.pdm-python
 /pdm.lock
 /.pdm-build/
 

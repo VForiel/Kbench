@@ -1,6 +1,6 @@
 [project]
 name = "Kbench"
-version = "0.3.3"
+version = "0.3.4"
 description = "Kernel test bench controls"
 authors = [
     {name = "Photonics", email = "vincent.foriel@gmail.com"},
@@ -16,8 +16,8 @@ readme = "README.md"
 license = {text = "MIT"}
 
 [build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [tool.pdm]
 distribution = true
