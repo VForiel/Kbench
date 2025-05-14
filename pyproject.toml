@@ -1,9 +1,10 @@
 [project]
 name = "Kbench"
-version = "0.3.2"
+version = "0.3.3"
 description = "Kernel test bench controls"
 authors = [
     {name = "Photonics", email = "vincent.foriel@gmail.com"},
+    {name = "Vincent Foriel", email = "vincent.foriel@gmail.com"},
 ]
 dependencies = [
     "numpy",
@@ -15,8 +16,8 @@ readme = "README.md"
 license = {text = "MIT"}
 
 [build-system]
-requires = ["setuptools>=61"]
-build-backend = "setuptools.build_meta"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
 
 [tool.pdm]
 distribution = true
@@ -24,9 +25,9 @@ distribution = true
 [tool.setuptools]
 include-package-data = true
 
-[tool.setuptools.package-data]
-"bmc" = ["*.so"]
-
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["kbench*", bmc*]
+include = ["kbench*", "bmc*"]
+
+[tool.setuptools.package-data]
+"bmc" = ["*.so"]

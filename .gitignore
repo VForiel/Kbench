@@ -1,6 +1,15 @@
-/.kvenv/
+# pdm
 /.venv/
+/.pdm-python
+/pdm.lock
+/.pdm-build/
+
+# Python
 __pycache__/
+
+# Docs
 /docs/_build/
+
+# Distribution / packaging
 *.egg-info/
 /build/
