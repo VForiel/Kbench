@@ -7,4 +7,4 @@
 
 bench_overview
 pupil_mask
-```
+deformable_mirror

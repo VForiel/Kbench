@@ -1,4 +1,4 @@
-# Segment Class
+# Segment
 
 The `Segment` class represents an individual segment of the deformable mirror. It allows manipulating the piston, tip, and tilt values for each segment.
 
