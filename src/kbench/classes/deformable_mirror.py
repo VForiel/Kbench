@@ -8,7 +8,9 @@ class DM():
     Class to represent a deformable mirror (DM) in the optical system.
     """
 
-    def __init__(self, serial_number:str = "27BW007#051", config_path:str = "./DM_config.json"):
+    default_config_path = "./DM_config.json"
+
+    def __init__(self, serial_number:str = "27BW007#051", config_path:str = default_config_path):
 
         self.serial_number = serial_number
 
@@ -37,7 +39,7 @@ class DM():
 
     #Config -------------------------------------------------------------------
 
-    def save_config(self, path:str = "./config.json"):
+    def save_config(self, path:str = default_config_path):
         """
         Save the current configuration of the DM.
         """
