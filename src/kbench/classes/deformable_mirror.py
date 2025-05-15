@@ -22,7 +22,9 @@ class DM():
                 config = json.load(f)
             self.load_config(config)
         else:
-            print(f"Config file not found: {config_path}. Segment positions is unknown, reset them using the reset() method before accessing their value.")
+            print(f"Config file not found: {config_path}. Reseting all segments to ptt = (0,0,0).")
+            for segment in self.segments:
+                segment.set_ptt(0, 0, 0)
 
     #--------------------------------------------------------------------------
 
