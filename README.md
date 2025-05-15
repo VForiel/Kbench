@@ -9,17 +9,17 @@ Requirements:
 
 0. (Recommended) Create a virtual environment
     ```bash
-    python3.8 -m venv .kvenv
+    python3.8 -m venv .venv
     ```
     and activate it
     ```bash
-    source .kvenv/bin/activate # Linux
-    .kvenv/Scripts/activate # Windows
+    source .venv/bin/activate # Linux
+    .venv/Scripts/activate # Windows
     ```
 
 1. Install the python module
     ```bash
-    pip install git+https://github.com/VForiel/Kbench
+    pip install Kbench-controls
     ```
 
 2. Start a python instance
@@ -42,7 +42,11 @@ If you want to build the doc locally, once the project is setup (according to th
     ```bash
     cd docs
     ```
-1. Build the doc
+2. Install the requirements (by preference, in a virtual environment)
+    ```bash
+    pip install -r requirements.txt
+    ```
+3. Build the doc
     ```bash
     make html # Linux
     .\make.bat html # Windows

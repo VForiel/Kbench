@@ -115,10 +115,7 @@ class PupilMask():
     def rotate_clockwise(self, pos:float, abs:bool=False) -> str:
         """
         Rotate the mask clockwise by a certain number of degrees.
-
-        Alias
-        -----
-        rotate()
+        Alias: rotate()
 
         Parameters
         ----------
@@ -136,28 +133,8 @@ class PupilMask():
             return self.newport.set(pos)
         else:
             return self.newport.add(pos)
-        
-    # Alias
+      
     def rotate(self, pos:float, abs:bool=False) -> str:
-        """
-        Rotate the mask clockwise by a certain number of degrees.
-        
-        Alias
-        -----
-        rotate_clockwise()
-
-        Parameters
-        ----------
-        pos : float
-            Number of degrees to rotate.
-        abs : bool, optional
-            If True, rotate to an absolute position. Default is False.
-            
-        Returns
-        -------
-        str
-            Response from the motor after moving to the target position.
-        """
         return self.rotate_clockwise(pos, abs)
 
     # Apply Mask --------------------------------------------------------------
@@ -215,8 +192,6 @@ class Zaber():
 
     Attributes
     ----------
-    session : serial.Serial
-        Serial connection to the Zaber motor.
     id : int
         ID of the Zaber motor.
     """
@@ -230,8 +205,19 @@ class Zaber():
         id : int
             ID of the Zaber motor.
         """
-        self.session = session
+        self._session = session
         self.id = id
+
+    # Properties --------------------------------------------------------------
+
+    @property
+    def id(self) -> int:
+        return self._id
+    
+    @id.setter
+    def id(self, id:int) -> None:
+        raise ValueError("ID cannot be changed after initialization.")
+    
 
     # Wait --------------------------------------------------------------------
 
@@ -260,8 +246,8 @@ class Zaber():
         str
             Response from the motor.
         """
-        self.session.write(f"/{self.id} {command}\r\n".encode())
-        return self.session.readline().decode()
+        self._session.write(f"/{self.id} {command}\r\n".encode())
+        return self._session.readline().decode()
     
     #--------------------------------------------------------------------------
 
@@ -323,15 +309,18 @@ class Zaber():
 class Newport():
     """
     Class to control the Newport motor (wheel).
-
-    Attributes
-    ----------
-    session : serial.Serial
-        Serial connection to the Newport motor.
     """
 
     def __init__(self, session):
-        self.session = session
+        """
+        Initialize the Newport motor.
+
+        Parameters
+        ----------
+        session : serial.Serial
+            Serial connection to the Newport motor.
+        """
+        self._session = session
         self.home_search()
 
     #--------------------------------------------------------------------------
@@ -377,8 +366,8 @@ class Newport():
             Response from the motor.
         """
 
-        self.session.write(f"{command}\r\n".encode())
-        return self.session.readline().decode()
+        self._session.write(f"{command}\r\n".encode())
+        return self._session.readline().decode()
     
     #--------------------------------------------------------------------------
 

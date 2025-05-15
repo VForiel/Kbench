@@ -55,27 +55,19 @@ class DM():
 
     @property
     def serial_number(self) -> str:
-        """
-        Get the serial number of the DM.
-
-        Returns
-        -------
-        str
-            The serial number of the DM.
-        """
         return self._serial_number
+    
+    @serial_number.setter
+    def serial_number(self, _):
+        raise AttributeError("Serial number is read-only and cannot be modified.")
     
     @property
     def segments(self) -> list['Segment']:
-        """
-        Get the list of segments of the DM.
-
-        Returns
-        -------
-        list[Segment]
-            The list of segments of the DM.
-        """
         return self._segments
+    
+    @segments.setter
+    def segments(self, _):
+        raise AttributeError("Segments are read-only and cannot be modified.")
 
     #  Specific methods -------------------------------------------------------
 
@@ -230,26 +222,10 @@ class Segment():
 
     @property
     def piston(self) -> float:
-        """
-        Get the piston value of the segment.
-
-        Returns
-        -------
-        float
-            The piston value of the segment in nm.
-        """
         return self.get_piston()
     
     @piston.setter
     def piston(self, value: float):
-        """
-        Set the piston value of the segment in nm.
-
-        Parameters  
-        ----------
-        value : float
-            The piston value to set.
-        """
         self.set_piston(value)
         
     
@@ -296,26 +272,10 @@ class Segment():
 
     @property
     def tip(self) -> float:
-        """
-        Get the tip value of the segment.
-
-        Returns
-        -------
-        float
-            The tip value of the segment in radians.
-        """
         return self.get_tip()
     
     @tip.setter
     def tip(self, value: float) -> None:
-        """
-        Set the tip value of the segment.
-
-        Parameters
-        ----------
-        value : float
-            The tip value to set in radians.
-        """
         self.set_tip(value)
 
     def set_tip(self, value: float) -> str:
@@ -361,26 +321,10 @@ class Segment():
 
     @property
     def tilt(self) -> float:
-        """
-        Get the tilt value of the segment.
-
-        Returns
-        -------
-        float
-            The tilt value of the segment in radians.
-        """
         return self.get_tilt()
     
     @tilt.setter
     def tilt(self, value: float) -> None:
-        """
-        Set the tilt value of the segment.
-
-        Parameters
-        ----------
-        value : float
-            The tilt value to set in radians.
-        """
         self.set_tilt(value)
 
     def set_tilt(self, value: float) -> str:
