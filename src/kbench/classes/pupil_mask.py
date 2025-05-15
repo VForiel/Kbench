@@ -34,6 +34,20 @@ class PupilMask():
             zaber_v_home:int = 154402, # Vertical axis home position (steps)
             newport_home:float = 56.15, # Angle of the pupil mask n°1 (degree)
             ):
+        """
+        Parameters
+        ----------
+        zaber_port : str
+            Port for the Zaber motors (default is "/dev/ttyUSB0").
+        newport_port : str
+            Port for the Newport motor (default is "/dev/ttyUSB1").
+        zaber_h_home : int
+            Home position for the horizontal motor (default is 188490).
+        zaber_v_home : int
+            Home position for the vertical motor (default is 154402).
+        newport_home : float
+            Angular home position for the first mask (default is 56.15).
+        """
         
         # Initialize the serial connections for Zaber and Newport
         zaber_session = serial.Serial(zaber_port, 115200, timeout=0.1)
@@ -102,6 +116,10 @@ class PupilMask():
         """
         Rotate the mask clockwise by a certain number of degrees.
 
+        Alias
+        -----
+        rotate()
+
         Parameters
         ----------
         pos : float
@@ -121,9 +139,28 @@ class PupilMask():
         
     # Alias
     def rotate(self, pos:float, abs:bool=False) -> str:
+        """
+        Rotate the mask clockwise by a certain number of degrees.
+        
+        Alias
+        -----
+        rotate_clockwise()
+
+        Parameters
+        ----------
+        pos : float
+            Number of degrees to rotate.
+        abs : bool, optional
+            If True, rotate to an absolute position. Default is False.
+            
+        Returns
+        -------
+        str
+            Response from the motor after moving to the target position.
+        """
         return self.rotate_clockwise(pos, abs)
 
-    #--------------------------------------------------------------------------
+    # Apply Mask --------------------------------------------------------------
 
     def apply_mask(self, mask:int) -> str:
         """
@@ -149,8 +186,12 @@ class PupilMask():
 
         Returns
         -------
-        tuple
-            Current positions of the horizontal and vertical motors.
+        float
+            Current angular position of the mask wheel (in degrees).
+        int
+            Current position of the horizontal Zaber motor (in steps).
+        int
+            Current position of the vertical Zaber motor (in steps).
         """
         return self.newport.get(), self.zaber_h.get(), self.zaber_v.get()
     
@@ -158,7 +199,7 @@ class PupilMask():
 
     def reset(self) -> None:
         """
-        Reset the mask wheel to the 4 vertical holes.
+        Reset the mask wheel to the 4 vertical holes and the Zaber motors to their home positions.
         """
         self.apply_mask(4)
         self.zaber_h.set(self.zaber_h_home)
@@ -172,17 +213,23 @@ class Zaber():
     """
     Class to control the Zaber motors (axis).
 
-    Methods
-    -------
-    get()
-        Get the current position of the motor.
-    set(pos)
-        Move the motor to an absolute position.
-    add(pos)
-        Move the motor by a relative number of steps.
+    Attributes
+    ----------
+    session : serial.Serial
+        Serial connection to the Zaber motor.
+    id : int
+        ID of the Zaber motor.
     """
 
     def __init__(self, session, id):
+        """
+        Parameters
+        ----------
+        session : serial.Serial
+            Serial connection to the Zaber motor.
+        id : int
+            ID of the Zaber motor.
+        """
         self.session = session
         self.id = id
 
@@ -200,25 +247,38 @@ class Zaber():
     #--------------------------------------------------------------------------
 
     def send_command(self, command):
+        """
+        Send a command to the motor and return the response.
+
+        Parameters
+        ----------
+        command : str
+            Command to send to the motor.
+
+        Returns
+        -------
+        str
+            Response from the motor.
+        """
         self.session.write(f"/{self.id} {command}\r\n".encode())
         return self.session.readline().decode()
     
     #--------------------------------------------------------------------------
 
-    def get(self):
+    def get(self) -> int:
         """
         Get the current position of the motor.
 
         Returns
         -------
-        str
-            Current position of the motor.
+        int
+            Current position of the motor (in steps).
         """
         return self.send_command("get pos")
     
     #--------------------------------------------------------------------------
     
-    def set(self, pos):
+    def set(self, pos:int) -> str:
         """
         Move the motor to an absolute position.
 
@@ -226,14 +286,19 @@ class Zaber():
         ----------
         pos : int
             Target position in steps.
+
+        Returns
+        -------
+        str
+            Response from the motor after moving to the target position.
         """
         response = self.send_command(f"move abs {pos}")
         self.wait()
         return response
     
     #--------------------------------------------------------------------------
-    
-    def add(self, pos):
+
+    def add(self, pos:int) -> str:
         """
         Move the motor by a relative number of steps.
 
@@ -241,6 +306,11 @@ class Zaber():
         ----------
         pos : int
             Number of steps to move.
+
+        Returns
+        -------
+        str
+            Response from the motor after moving to the target position.
         """
         response = self.send_command(f"move rel {pos}")
         self.wait()
@@ -254,14 +324,10 @@ class Newport():
     """
     Class to control the Newport motor (wheel).
 
-    Methods
-    -------
-    get()
-        Get the current angular position of the motor.
-    set(pos)
-        Rotate the motor to an absolute angular position.
-    add(pos)
-        Rotate the motor by a relative angle.
+    Attributes
+    ----------
+    session : serial.Serial
+        Serial connection to the Newport motor.
     """
 
     def __init__(self, session):
@@ -297,6 +363,20 @@ class Newport():
     #--------------------------------------------------------------------------
 
     def send_command(self, command):
+        """
+        Send a command to the motor and return the response.
+
+        Parameters
+        ----------
+        command : str
+            Command to send to the motor.
+
+        Returns
+        -------
+        str
+            Response from the motor.
+        """
+
         self.session.write(f"{command}\r\n".encode())
         return self.session.readline().decode()
     
@@ -304,7 +384,7 @@ class Newport():
 
     def get(self) -> float:
         """
-        Get the current angular position of the motor.
+        Get the current angular position of the motor (in degrees).
 
         Returns
         -------
