@@ -95,7 +95,7 @@ class DM():
             json.dump(config, f, indent=4)
         print(f"Configuration saved to {path}")
 
-    def load_config(self, config_path:str):
+    def load_config(self, config_path:str = default_config_path):
         """
         Load the configuration of the DM from a JSON file.
         """
