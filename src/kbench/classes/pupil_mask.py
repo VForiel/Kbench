@@ -48,9 +48,11 @@ class PupilMask():
         self.zaber_h = Zaber(zaber_session, 2)
         self.newport = Newport(newport_session)
 
+        self.reset()
+
     #--------------------------------------------------------------------------
 
-    def move_right(self, pos, abs=False):
+    def move_right(self, pos:int, abs:bool=False) -> str:
         """
         Move the mask to the right by a certain number of steps.
 
@@ -60,6 +62,11 @@ class PupilMask():
             Number of steps to move.
         abs : bool, optional
             If True, move to an absolute position. Default is False.
+
+        Returns
+        -------
+        str
+            Response from the motor after moving to the target position.
         """
         if abs:
             return self.zaber_h.set(pos)
@@ -67,8 +74,8 @@ class PupilMask():
             return self.zaber_h.add(pos)
         
     #--------------------------------------------------------------------------
-        
-    def move_up(self, pos, abs=False):
+
+    def move_up(self, pos:int, abs:bool=False) -> str:
         """
         Move the mask up by a certain number of steps.
 
@@ -78,6 +85,11 @@ class PupilMask():
             Number of steps to move.
         abs : bool, optional
             If True, move to an absolute position. Default is False.
+
+        Returns
+        -------
+        str
+            Response from the motor after moving to the target position.
         """
         if abs:
             return self.zaber_v.set(pos)
@@ -86,7 +98,7 @@ class PupilMask():
         
     #--------------------------------------------------------------------------
 
-    def rotate_clockwise(self, pos, abs=False):
+    def rotate_clockwise(self, pos:float, abs:bool=False) -> str:
         """
         Rotate the mask clockwise by a certain number of degrees.
 
@@ -96,6 +108,11 @@ class PupilMask():
             Number of degrees to rotate.
         abs : bool, optional
             If True, rotate to an absolute position. Default is False.
+
+        Returns
+        -------
+        str
+            Response from the motor after moving to the target position.
         """
         if abs:
             return self.newport.set(pos)
@@ -103,12 +120,12 @@ class PupilMask():
             return self.newport.add(pos)
         
     # Alias
-    def rotate(self, pos, abs=False):
+    def rotate(self, pos:float, abs:bool=False) -> str:
         return self.rotate_clockwise(pos, abs)
 
     #--------------------------------------------------------------------------
 
-    def apply_mask(self, mask:int):
+    def apply_mask(self, mask:int) -> str:
         """
         Rotate the mask wheel to the desired mask position.
 
@@ -116,6 +133,11 @@ class PupilMask():
         ----------
         mask : int
             Mask number to apply.
+
+        Returns
+        -------
+        str
+            Response from the motor after moving to the target position.
         """
         return self.newport.set(self.newport_home + (mask-1)*60) # Move to the desired mask position
         
@@ -164,6 +186,17 @@ class Zaber():
         self.session = session
         self.id = id
 
+    # Wait --------------------------------------------------------------------
+
+    def wait(self) -> None:
+        """
+        Wait for the motor to reach the target position.
+        """
+        position = None
+        while position != self.get():
+            position = self.get()
+            time.sleep(0.1)
+
     #--------------------------------------------------------------------------
 
     def send_command(self, command):
@@ -194,7 +227,9 @@ class Zaber():
         pos : int
             Target position in steps.
         """
-        return self.send_command(f"move abs {pos}")
+        response = self.send_command(f"move abs {pos}")
+        self.wait()
+        return response
     
     #--------------------------------------------------------------------------
     
@@ -207,7 +242,9 @@ class Zaber():
         pos : int
             Number of steps to move.
         """
-        return self.send_command(f"move rel {pos}")
+        response = self.send_command(f"move rel {pos}")
+        self.wait()
+        return response
     
 #==============================================================================
 # Newport Class
@@ -229,17 +266,22 @@ class Newport():
 
     def __init__(self, session):
         self.session = session
-
         self.home_search()
 
     #--------------------------------------------------------------------------
 
-    def home_search(self):
+    def home_search(self) -> str:
         """
         Move the motor to the home position.
+
+        Returns
+        -------
+        str
+            Response from the motor after moving to home position.
         """
-        self.send_command("1OR?")
+        response = self.send_command("1OR?")
         self.wait()
+        return response
 
     # Wait --------------------------------------------------------------------
 
@@ -273,7 +315,7 @@ class Newport():
     
     #--------------------------------------------------------------------------
 
-    def set(self, pos:float):
+    def set(self, pos:float) -> str:
         """
         Rotate the motor to an absolute angular position (in degrees).
 
@@ -281,14 +323,19 @@ class Newport():
         ----------
         pos : int
             Target angular position in degrees.
+
+        Returns
+        -------
+        str
+            Response from the motor after moving to the target position.
         """
-        res = self.send_command(f"1PA{pos}")
+        response = self.send_command(f"1PA{pos}")
         self.wait()
-        return res
+        return response
     
     #--------------------------------------------------------------------------
 
-    def add(self, pos:int):
+    def add(self, pos:int) -> str:
         """
         Rotate the motor by a relative angle.
 
@@ -296,7 +343,12 @@ class Newport():
         ----------
         pos : int
             Angle to rotate in degrees.
+
+        Returns
+        -------
+        str
+            Response from the motor after moving to the target position.
         """
-        res = self.send_command(f"1PR{pos}")
+        response = self.send_command(f"1PR{pos}")
         self.wait()
-        return res
+        return response
