@@ -1,15 +1,13 @@
 [project]
-name = "Kbench"
-version = "0.3.4"
+name = "Kbench-controls"
+version = "0.3.7"
 description = "Kernel test bench controls"
 authors = [
-    {name = "Photonics", email = "vincent.foriel@gmail.com"},
     {name = "Vincent Foriel", email = "vincent.foriel@gmail.com"},
 ]
 dependencies = [
     "numpy",
     "pyserial",
-    "newportESP",
 ]
 requires-python = ">=3.8"
 readme = "README.md"

@@ -1,46 +1,71 @@
 import numpy as np
 import bmc
+import os
+import json
 
 class DM():
     """
     Class to represent a deformable mirror (DM) in the optical system.
     """
 
-    def __init__(self):
-        dm_serial_number = "27BW007#051"
+    def __init__(self, serial_number:str = "27BW007#051", config_path:str = "./DM_config.json"):
 
-        self.dm = bmc.BmcDm()
-        self.dm.open_dm(dm_serial_number)
-        self.dm.load_calibration_file("")
+        self.serial_number = serial_number
+
+        self.bmcdm = bmc.BmcDm()
+        self.bmcdm.open_dm(serial_number)
 
         self.segments = [Segment(self, i) for i in range(169)]
 
-    #--------------------------------------------------------------------------
-
-    def set_piston(self, value:float):
-        """
-        Set a global piston value of the DM segments.
-        """
-        for segment in self.segments:
-            segment.set_piston(value)
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            self.load_config(config)
+        else:
+            print(f"Config file not found: {config_path}. Segment positions is unknown, reset them using the reset() method before accessing their value.")
 
     #--------------------------------------------------------------------------
 
-    def set_tip(self, value:float):
+    def __iter__(self):
         """
-        Set a global tip value of the DM segments.
-        """
-        for segment in self.segments:
-            segment.set_tip(value)
-
-    #--------------------------------------------------------------------------
-
-    def set_tilt(self, value:float):
-        """
-        Set a global tilt value of the DM segments.
+        Iterate over the segments of the DM.
         """
         for segment in self.segments:
-            segment.set_tilt(value)
+            yield segment
+
+    #Config -------------------------------------------------------------------
+
+    def save_config(self, path:str = "./config.json"):
+        """
+        Save the current configuration of the DM.
+        """
+
+        config = {
+            "serial_number": self.serial_number,
+            "segments": {}
+        }
+
+        for segment in self.segments:
+            config["segments"][segment.id] = {
+                "piston": segment.piston,
+                "tip": segment.tip,
+                "tilt": segment.tilt
+            }
+
+        with open(path, 'w') as f:
+            json.dump(config, f, indent=4)
+        print(f"Configuration saved to {path}")
+
+    def load_config(self, config:dict):
+        """
+        Load the configuration of the DM from a dictionary.
+        """
+        
+        for segment_id, segment_config in config["segments"].items():
+            segment = self.segments[int(segment_id)]
+            segment.set_ptt(segment_config["piston"], segment_config["tip"], segment_config["tilt"])
+        
+        print("Configuration loaded")
 
 #==============================================================================
 # Segment class
@@ -55,69 +80,75 @@ class Segment():
         self.dm = dm
         self.id = id
 
-    #--------------------------------------------------------------------------
+        self.piston = None
+        self.tip = None
+        self.tilt = None
 
-    def get_piston(self):
+    # piston ------------------------------------------------------------------
+
+    @property
+    def piston(self):
         """
         Get the piston value of the segment.
         """
-        print("get_piston not implemented")
-        ...
-
-    #--------------------------------------------------------------------------
-
-    def set_piston(self, value):
+        return self._piston
+    
+    @piston.setter
+    def piston(self, value):
         """
         Set the piston value of the segment.
         """
-        return self.dm.set_segment(self.id, value, 0, 0, True, True)
+        self._piston = value
+        return self.dm.bmcdm.set_segment(self.id, value, self.tip, self.tilt, True, True)
 
-    #--------------------------------------------------------------------------
+    # tip ---------------------------------------------------------------------
 
-    def get_tip(self):
+    @property
+    def tip(self):
         """
         Get the tip value of the segment.
         """
-        print("get_tip not implemented")
-        ...
-
-    #--------------------------------------------------------------------------
-
-    def set_tip(self, value):
+        return self._tip
+    
+    @tip.setter
+    def tip(self, value):
         """
         Set the tip value of the segment.
         """
-        return self.dm.set_segment(self.id, 0, value, 0, True, True)
+        self._tip = value
+        return self.dm.bmcdm.set_segment(self.id, self.piston, value, self.tilt, True, True)
 
-    #--------------------------------------------------------------------------
+    # tilt --------------------------------------------------------------------
 
-    def get_tilt(self):
+    @property
+    def tilt(self):
         """
         Get the tilt value of the segment.
         """
-        print("get_tilt not implemented")
-        ...
-
-    #--------------------------------------------------------------------------
-
-    def set_tilt(self, value):
+        return self._tilt
+    
+    @tilt.setter
+    def tilt(self, value):
         """
         Set the tilt value of the segment.
         """
-        return self.dm.set_segment(self.id, 0, 0, value, True, True)
+        self._tilt = value
+        return self.dm.bmcdm.set_segment(self.id, self.piston, self.tip, value, True, True)
 
-    def ptt_to_dac(self, piston, tip, tilt):
+    # ptt ---------------------------------------------------------------------
+
+    def set_ptt(self, piston, tip, tilt):
         """
-        Convert piston, tip, and tilt values to DAC values.
+        Get the tip-tilt value of the segment.
         """
-
-        # TODO
-        raise NotImplementedError("ptt_to_dac not implemented")
-
-        a0 = 218.75
-        again = 4000.0
-        sq3_2 = np.sqrt(3/2)
         
-        a_left  = piston + a0 * sq3_2 * tilt + a0/2 * tip;
-        a_top   = piston - a0 * tip;
-        a_right = piston - a0 * sq3_2 * tilt + a0/2 * tip;
+        self.piston = piston
+        self.tip = tip
+        self.tilt = tilt
+
+    def get_ptt(self):
+        """
+        Get the tip-tilt value of the segment.
+        """
+        
+        return self.piston, self.tip, self.tilt

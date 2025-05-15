@@ -1,5 +1,6 @@
 # pdm
 /.venv/
+/.pdm-python
 /pdm.lock
 /.pdm-build/
 
@@ -12,3 +13,4 @@ __pycache__/
 # Distribution / packaging
 *.egg-info/
 /build/
+/dist/
