@@ -126,6 +126,12 @@ class Segment():
         Get the piston value of the segment.
         """
         return self._piston
+    
+    def get_piston_range(self):
+        """
+        Get the piston range of the segment.
+        """
+        return self.dm.bmcdm.get_segment_range(self.id, bmc.DM_Piston, self.piston, self.tip, self.tilt, True)
 
     # tip ---------------------------------------------------------------------
 
@@ -156,6 +162,12 @@ class Segment():
         """
         return self._tip
 
+    def get_tip_range(self):
+        """
+        Get the tip range of the segment.
+        """
+        return self.dm.bmcdm.get_segment_range(self.id, bmc.DM_XTilt, self.piston, self.tip, self.tilt, True)
+
     # tilt --------------------------------------------------------------------
 
     @property
@@ -184,6 +196,12 @@ class Segment():
         Get the tilt value of the segment.
         """
         return self._tilt
+    
+    def get_tilt_range(self):
+        """
+        Get the tilt range of the segment.
+        """
+        return self.dm.bmcdm.get_segment_range(self.id, bmc.DM_YTilt, self.piston, self.tip, self.tilt, True)
 
     # ptt ---------------------------------------------------------------------
 
