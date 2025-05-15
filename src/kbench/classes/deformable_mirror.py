@@ -9,17 +9,26 @@ class DM():
     """
 
     default_config_path = "./DM_config.json"
+    __all__ = []
 
     def __init__(self, serial_number:str = "27BW007#051", config_path:str = default_config_path):
 
-        self.serial_number = serial_number
+        # Ensure that the DM is not already in use
+        for dm in DM.__all__:
+            if dm._serial_number == serial_number:
+                raise ValueError(f"DM with serial number {serial_number} already exists.")
+        DM.__all__.append(self)
 
+        self._serial_number = serial_number
+
+        # Initialize the DM with the given serial number
         self.bmcdm = bmc.BmcDm()
-        self.bmcdm.open_dm(serial_number)
-
+        self.bmcdm.open_dm(self._serial_number)
         self.segments = [Segment(self, i) for i in range(169)]
 
+        # Set the initial configuration of the DM
         if os.path.exists(config_path):
+            print(f"Loading config file: {config_path}.")
             with open(config_path, 'r') as f:
                 config = json.load(f)
             self.load_config(config)
@@ -95,15 +104,28 @@ class Segment():
         """
         Get the piston value of the segment.
         """
-        return self._piston
+        return self.get_piston()
     
     @piston.setter
     def piston(self, value):
         """
         Set the piston value of the segment.
         """
+        self.set_piston(value)
+        
+    
+    def set_piston(self, value):
+        """
+        Set the piston value of the segment.
+        """
         self._piston = value
         return self.dm.bmcdm.set_segment(self.id, value, self.tip, self.tilt, True, True)
+    
+    def get_piston(self):
+        """
+        Get the piston value of the segment.
+        """
+        return self._piston
 
     # tip ---------------------------------------------------------------------
 
@@ -112,15 +134,27 @@ class Segment():
         """
         Get the tip value of the segment.
         """
-        return self._tip
+        return self.get_tip()
     
     @tip.setter
     def tip(self, value):
         """
         Set the tip value of the segment.
         """
+        self.set_tip(value)
+
+    def set_tip(self, value):
+        """
+        Set the tip value of the segment.
+        """
         self._tip = value
         return self.dm.bmcdm.set_segment(self.id, self.piston, value, self.tilt, True, True)
+    
+    def get_tip(self):
+        """
+        Get the tip value of the segment.
+        """
+        return self._tip
 
     # tilt --------------------------------------------------------------------
 
@@ -129,15 +163,27 @@ class Segment():
         """
         Get the tilt value of the segment.
         """
-        return self._tilt
+        return self.get_tilt()
     
     @tilt.setter
     def tilt(self, value):
         """
         Set the tilt value of the segment.
         """
+        self.set_tilt(value)
+    
+    def set_tilt(self, value):
+        """
+        Set the tilt value of the segment.
+        """
         self._tilt = value
         return self.dm.bmcdm.set_segment(self.id, self.piston, self.tip, value, True, True)
+
+    def get_tilt(self):
+        """
+        Get the tilt value of the segment.
+        """
+        return self._tilt
 
     # ptt ---------------------------------------------------------------------
 
@@ -145,14 +191,10 @@ class Segment():
         """
         Get the tip-tilt value of the segment.
         """
-        
-        self.piston = piston
-        self.tip = tip
-        self.tilt = tilt
+        return self.set_piston(piston), self.set_tip(tip), self.set_tilt(tilt)
 
     def get_ptt(self):
         """
         Get the tip-tilt value of the segment.
         """
-        
         return self.piston, self.tip, self.tilt
