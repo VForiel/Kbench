@@ -1,4 +1,5 @@
 import serial
+import time
 
 #==============================================================================
 # Pupil Mask Class
@@ -29,9 +30,9 @@ class PupilMask():
             # On which ports the components are connected
             zaber_port:str = "/dev/ttyUSB0",
             newport_port:str = "/dev/ttyUSB1",
-            zaber_h_home:int = 189390, # Horizontal axis home position (steps)
-            zaber_v_home:int = 157602, # Vertical axis home position (steps)
-            newport_home:float = 56.3, # Angle of the pupil mask n°1 (degree)
+            zaber_h_home:int = 188490, # Horizontal axis home position (steps)
+            zaber_v_home:int = 154402, # Vertical axis home position (steps)
+            newport_home:float = 56.15, # Angle of the pupil mask n°1 (degree)
             ):
         
         # Initialize the serial connections for Zaber and Newport
@@ -137,7 +138,7 @@ class PupilMask():
         """
         Reset the mask wheel to the 4 vertical holes.
         """
-        self.newport.set(self.newport_home + 3*60) # Move to 4 vertical holes position
+        self.apply_mask(4)
         self.zaber_h.set(self.zaber_h_home)
         self.zaber_v.set(self.zaber_v_home)
     
@@ -229,15 +230,27 @@ class Newport():
     def __init__(self, session):
         self.session = session
 
-        self.reset()
+        self.home_search()
 
     #--------------------------------------------------------------------------
 
-    def reset(self):
+    def home_search(self):
         """
         Move the motor to the home position.
         """
         self.send_command("1OR?")
+        self.wait()
+
+    # Wait --------------------------------------------------------------------
+
+    def wait(self) -> None:
+        """
+        Wait for the motor to reach the target position.
+        """
+        position = None
+        while position != self.get():
+            position = self.get()
+            time.wait(0.1)
 
     #--------------------------------------------------------------------------
 
@@ -247,29 +260,31 @@ class Newport():
     
     #--------------------------------------------------------------------------
 
-    def get(self):
+    def get(self) -> float:
         """
         Get the current angular position of the motor.
 
         Returns
         -------
-        str
-            Current angular position of the motor.
+        float
+            Current angular position (in degrees) of the motor in degrees.
         """
-        return self.send_command("1TP?")
+        return float(self.send_command("1TP?")[3:-2])
     
     #--------------------------------------------------------------------------
 
-    def set(self, pos:int):
+    def set(self, pos:float):
         """
-        Rotate the motor to an absolute angular position.
+        Rotate the motor to an absolute angular position (in degrees).
 
         Parameters
         ----------
         pos : int
             Target angular position in degrees.
         """
-        return self.send_command(f"1PA{pos}")
+        res = self.send_command(f"1PA{pos}")
+        self.wait()
+        return res
     
     #--------------------------------------------------------------------------
 
@@ -282,4 +297,6 @@ class Newport():
         pos : int
             Angle to rotate in degrees.
         """
-        return self.send_command(f"1PR{pos}")
+        res = self.send_command(f"1PR{pos}")
+        self.wait()
+        return res

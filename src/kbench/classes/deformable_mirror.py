@@ -27,17 +27,14 @@ class DM():
         self.segments = [Segment(self, i) for i in range(169)]
 
         # Set the initial configuration of the DM
-        if os.path.exists(config_path):
-            print(f"Loading config file: {config_path}.")
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-            self.load_config(config)
-        else:
+        try:
+            self.load_config(config_path)
+        except FileNotFoundError:
             print(f"Config file not found: {config_path}. Reseting all segments to ptt = (0,0,0).")
             for segment in self.segments:
                 segment.set_ptt(0, 0, 0)
 
-    #--------------------------------------------------------------------------
+    #  Specific methods -------------------------------------------------------
 
     def __iter__(self):
         """
@@ -45,6 +42,35 @@ class DM():
         """
         for segment in self.segments:
             yield segment
+
+    def __getitem__(self, index):
+        """
+        Get a segment by its index.
+        """
+
+        try:
+            index = int(index)
+        except ValueError:
+            raise TypeError("Index must be an integer.")
+        
+        if index < 0 or index >= len(self.segments):
+            raise IndexError("Index out of range.")
+        
+        return self.segments[index]
+    
+    def __len__(self):
+        """
+        Get the number of segments in the DM.
+        """
+        return len(self.segments)
+    
+    def __del__(self):
+        """
+        Close the DM connection when the object is deleted.
+        """
+        self.bmcdm.close_dm()
+        print(f"DM with serial number {self._serial_number} closed.")
+        DM.__all__.remove(self)
 
     #Config -------------------------------------------------------------------
 
@@ -69,10 +95,18 @@ class DM():
             json.dump(config, f, indent=4)
         print(f"Configuration saved to {path}")
 
-    def load_config(self, config:dict):
+    def load_config(self, config_path:str):
         """
-        Load the configuration of the DM from a dictionary.
+        Load the configuration of the DM from a JSON file.
         """
+
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Config file not found: {config_path}")
+        
+        print(f"Loading config file: {config_path}.")
+        
+        with open(config_path, 'r') as f:
+            config = json.load(f)
         
         for segment_id, segment_config in config["segments"].items():
             segment = self.segments[int(segment_id)]
