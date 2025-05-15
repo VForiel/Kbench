@@ -54,7 +54,7 @@ class DM():
         """
 
         config = {
-            "serial_number": self.serial_number,
+            "serial_number": self._serial_number,
             "segments": {}
         }
 
