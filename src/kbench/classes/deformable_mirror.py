@@ -80,9 +80,9 @@ class Segment():
         self.dm = dm
         self.id = id
 
-        self.piston = None
-        self.tip = None
-        self.tilt = None
+        self._piston = 0
+        self._tip = 0
+        self._tilt = 0
 
     # piston ------------------------------------------------------------------
 
