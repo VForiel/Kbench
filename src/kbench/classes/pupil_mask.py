@@ -129,7 +129,7 @@ class PupilMask():
         tuple
             Current positions of the horizontal and vertical motors.
         """
-        return self.zaber_h.get(), self.zaber_v.get()
+        return self.newport.get(), self.zaber_h.get(), self.zaber_v.get()
     
     #--------------------------------------------------------------------------
 
@@ -228,6 +228,16 @@ class Newport():
 
     def __init__(self, session):
         self.session = session
+
+        self.reset()
+
+    #--------------------------------------------------------------------------
+
+    def reset(self):
+        """
+        Move the motor to the home position.
+        """
+        self.send_command("1OR?")
 
     #--------------------------------------------------------------------------
 
