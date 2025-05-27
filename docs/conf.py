@@ -37,7 +37,7 @@ napoleon_include_private_with_doc = False
 napoleon_use_param = True
 napoleon_use_rtype = True
 
-autodoc_mock_imports = ["bmc", "numpy", "serial", "importlib"]
+autodoc_mock_imports = ["bmc", "numpy", "serial"]
 
 myst_enable_extensions = [
     "amsmath",
