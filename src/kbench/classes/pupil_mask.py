@@ -33,8 +33,12 @@ class PupilMask():
             zaber_h_home:int = 188490, # Horizontal axis home position (steps)
             zaber_v_home:int = 154402, # Vertical axis home position (steps)
             newport_home:float = 56.15, # Angle of the pupil mask n°1 (degree)
+            reset = False, # Reset the mask to the home position
             ):
         """
+        Initialize the PupilMask class.
+        ⚠️ It is highly recommended to reset the mask to the home position using the `reset=True` parameter.
+
         Parameters
         ----------
         zaber_port : str
@@ -47,6 +51,8 @@ class PupilMask():
             Home position for the vertical motor (default is 154402).
         newport_home : float
             Angular home position for the first mask (default is 56.15).
+        reset : bool, optional
+            If True, reset the mask to the home position on initialization. Default is False.
         """
         
         # Initialize the serial connections for Zaber and Newport
@@ -62,7 +68,8 @@ class PupilMask():
         self.zaber_h = Zaber(zaber_session, 2)
         self.newport = Newport(newport_session)
 
-        self.reset()
+        if reset:
+            self.reset()
 
     #--------------------------------------------------------------------------
 
@@ -178,6 +185,7 @@ class PupilMask():
         """
         Reset the mask wheel to the 4 vertical holes and the Zaber motors to their home positions.
         """
+        self.newport.home_search()
         self.apply_mask(4)
         self.zaber_h.set(self.zaber_h_home)
         self.zaber_v.set(self.zaber_v_home)
@@ -206,7 +214,7 @@ class Zaber():
             ID of the Zaber motor.
         """
         self._session = session
-        self.id = id
+        self._id = id
 
     # Properties --------------------------------------------------------------
 
@@ -309,6 +317,7 @@ class Zaber():
 class Newport():
     """
     Class to control the Newport motor (wheel).
+    ⚠️ If the command sent to the Newport motor doesn't work but no error is raised, ensure the Newport know it's home position by running the `home_search()` method first.
     """
 
     def __init__(self, session):
@@ -321,7 +330,6 @@ class Newport():
             Serial connection to the Newport motor.
         """
         self._session = session
-        self.home_search()
 
     #--------------------------------------------------------------------------
 
@@ -347,7 +355,7 @@ class Newport():
         position = None
         while position != self.get():
             position = self.get()
-            time.wait(0.1)
+            time.sleep(0.1)
 
     #--------------------------------------------------------------------------
 
