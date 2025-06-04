@@ -76,9 +76,9 @@ class PupilMask():
 
     #--------------------------------------------------------------------------
 
-    def move_right(self, pos:int, abs:bool=False) -> str:
+    def move_h(self, pos:int, abs:bool=False) -> str:
         """
-        Move the mask to the right by a certain number of steps.
+        Move the mask to the horizontal by a certain number of steps.
 
         Parameters
         ----------
@@ -99,9 +99,9 @@ class PupilMask():
         
     #--------------------------------------------------------------------------
 
-    def move_up(self, pos:int, abs:bool=False) -> str:
+    def move_v(self, pos:int, abs:bool=False) -> str:
         """
-        Move the mask up by a certain number of steps.
+        Move the mask vertically by a certain number of steps.
 
         Parameters
         ----------
@@ -275,7 +275,7 @@ class Zaber():
     
     #--------------------------------------------------------------------------
     
-    def set(self, pos:int) -> str:
+    def move_abs(self, pos:int) -> str:
         """
         Move the motor to an absolute position.
 
@@ -295,7 +295,7 @@ class Zaber():
     
     #--------------------------------------------------------------------------
 
-    def add(self, pos:int) -> str:
+    def move_rel(self, pos:int) -> str:
         """
         Move the motor by a relative number of steps.
 
@@ -396,7 +396,7 @@ class Newport():
     
     #--------------------------------------------------------------------------
 
-    def set(self, pos:float) -> str:
+    def move_abs(self, pos:float) -> str:
         """
         Rotate the motor to an absolute angular position (in degrees).
 
@@ -416,7 +416,7 @@ class Newport():
     
     #--------------------------------------------------------------------------
 
-    def add(self, pos:int) -> str:
+    def move_rel(self, pos:int) -> str:
         """
         Rotate the motor by a relative angle.
 
