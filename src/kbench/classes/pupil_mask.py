@@ -1,5 +1,6 @@
 import serial
 import time
+import json
 
 #==============================================================================
 # Pupil Mask Class
