@@ -94,9 +94,9 @@ class PupilMask():
             Response from the motor after moving to the target position.
         """
         if abs:
-            return self.zaber_h.set(pos)
+            return self.zaber_h.move_abs(pos)
         else:
-            return self.zaber_h.add(pos)
+            return self.zaber_h.move_rel(pos)
         
     #--------------------------------------------------------------------------
 
@@ -117,9 +117,9 @@ class PupilMask():
             Response from the motor after moving to the target position.
         """
         if abs:
-            return self.zaber_v.set(pos)
+            return self.zaber_v.move_abs(pos)
         else:
-            return self.zaber_v.add(pos)
+            return self.zaber_v.move_rel(pos)
         
     #--------------------------------------------------------------------------
 
@@ -141,30 +141,44 @@ class PupilMask():
             Response from the motor after moving to the target position.
         """
         if abs:
-            return self.newport.set(pos)
+            return self.newport.move_abs(pos)
         else:
-            return self.newport.add(pos)
+            return self.newport.move_rel(pos)
       
     def rotate(self, pos:float, abs:bool=False) -> str:
         return self.rotate_clockwise(pos, abs)
 
     # Apply Mask --------------------------------------------------------------
-
-    def apply_mask(self, mask:int) -> str:
-        """
-        Rotate the mask wheel to the desired mask position.
-
-        Parameters
-        ----------
-        mask : int
-            Mask number to apply.
-
-        Returns
-        -------
-        str
-            Response from the motor after moving to the target position.
-        """
-        return self.newport.set(self.newport_home + (mask-1)*60) # Move to the desired mask position
+    def apply_mask(self, mask:int, config_file:str) -> str:
+                """
+                Rotate the mask wheel and move the Zabers to the desired mask position.
+        
+                Parameters
+                ----------
+                mask : int
+                    Mask number to apply.
+                config_file: str
+                    Json file in which are stored the motors positions (wheel, Zaber 1 (vertical), Zaber 2 (horizontal))
+                    for each wheel position.
+                
+                Returns
+                -------
+                str
+                    Response from the motor after moving to the target position.
+                """
+                
+                with open(config_file, 'r') as f:
+                    data = json.load(f)
+        
+                _, zab1, zab2 = data[str(mask)]
+        
+                if zab1 >= 0:
+                    self.zaber_v.move_abs(zab1)
+        
+                if zab2 >= 0:
+                    self.zaber_h.move_abs(zab1)
+                
+                self.newport.move_abs(self.newport_home + (mask-1)*60) # Move to the desired mask position
         
     #--------------------------------------------------------------------------
         
@@ -191,8 +205,8 @@ class PupilMask():
         """
         self.newport.home_search()
         self.apply_mask(4)
-        self.zaber_h.set(self.zaber_h_home)
-        self.zaber_v.set(self.zaber_v_home)
+        self.zaber_h.move_abs(self.zaber_h_home)
+        self.zaber_v.move_abs(self.zaber_v_home)
     
 #==============================================================================
 # Zaber Class
