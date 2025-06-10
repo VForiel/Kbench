@@ -41,7 +41,7 @@ class DM():
         # Initialize the DM with the given serial number
         self.bmcdm = bmc.BmcDm()
         self.bmcdm.open_dm(self._serial_number)
-        self.segments = [Segment(self, i) for i in range(169)]
+        self._segments = [Segment(self, i) for i in range(169)]
 
         # Set the initial configuration of the DM
         try:
