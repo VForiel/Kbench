@@ -176,7 +176,7 @@ class PupilMask():
                     self.zaber_v.move_abs(zab1)
         
                 if zab2 >= 0:
-                    self.zaber_h.move_abs(zab1)
+                    self.zaber_h.move_abs(zab2)
                 
                 self.newport.move_abs(self.newport_home + (mask-1)*60) # Move to the desired mask position
         
@@ -196,6 +196,7 @@ class PupilMask():
             Current position of the vertical Zaber motor (in steps).
         """
         return self.newport.get(), self.zaber_h.get(), self.zaber_v.get()
+    
     
     #--------------------------------------------------------------------------
 
