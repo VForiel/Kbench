@@ -197,7 +197,27 @@ class PupilMask():
         """
         return self.newport.get(), self.zaber_h.get(), self.zaber_v.get()
     
-    
+    def save_pos(self, mask, config_file):
+        """
+        Save position of the wheel and the two zabers into a json file.
+
+        Parameters
+        ----------
+        mask : int
+            Key of the field of the json field to fill, it matches a preset position of the wheel in the json file.
+        config_file : str
+            Name of the json file.
+
+        """
+                
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+            
+        config[str(mask)] = list(self.get_pos())
+        
+        with open(config_file, 'w') as f:
+            json.dump(config, f)
+
     #--------------------------------------------------------------------------
 
     def reset(self) -> None:
