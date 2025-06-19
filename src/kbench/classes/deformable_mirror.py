@@ -2,6 +2,7 @@ import numpy as np
 import bmc
 import os
 import json
+import time
 
 class DM():
     """
@@ -18,7 +19,7 @@ class DM():
     _default_config_path = "./DM_config.json"
     _all = []
 
-    def __init__(self, serial_number:str = "27BW007#051", config_path:str = _default_config_path):
+    def __init__(self, serial_number:str = "27BW007#051", config_path:str = _default_config_path, stabilization_time:float = 1):
         """
         Initialize the DM with the given serial number and configuration file.
 
@@ -28,6 +29,8 @@ class DM():
             Serial number of the DM.
         config_path : str
             Path to the configuration file.
+        stabilization_time : float
+            Time in seconds to wait for the DM to stabilize after setting the configuration.
         """
 
         # Ensure that the DM is not already in use
@@ -50,6 +53,8 @@ class DM():
             print(f"Config file not found: {config_path}. Reseting all segments to ptt = (0,0,0).")
             for segment in self.segments:
                 segment.set_ptt(0, 0, 0)
+
+        time.sleep(stabilization_time)
 
     # Properties ------------------------------------------------------------
 

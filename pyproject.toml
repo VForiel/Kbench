@@ -1,6 +1,6 @@
 [project]
 name = "Kbench-controls"
-version = "0.5.1"
+version = "0.5.2"
 description = "Kernel test bench controls"
 authors = [
     {name = "Vincent Foriel", email = "vincent.foriel@gmail.com"},
