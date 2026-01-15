@@ -69,7 +69,8 @@ def get_delays(
     screen_physical_size=None,
     time_step=0.1,
     n_steps=100,
-    demo=False
+    demo=False,
+    save_as=None
 ):
     """
     Calculate atmospheric phase delays for multiple telescopes.
@@ -108,8 +109,10 @@ def get_delays(
     n_steps : int, optional
         Number of time steps to calculate (default: 100)
     demo : bool, optional
-        If True, displays an animation of atmospheric evolution 
         (default: False)
+    save_as : str, optional
+        Path to save the animation as a GIF (e.g. "atmo.gif"). 
+        Only used if demo=True. (default: None)
         
     Returns
     -------
@@ -232,22 +235,35 @@ def get_delays(
         current_offset_x += dx_per_step
         current_offset_y += dy_per_step
         
-        # Modulo to stay within large screen
-        offset_x_int = int(current_offset_x) % screen_size
-        offset_y_int = int(current_offset_y) % screen_size
+        # Split into integer and fractional parts
+        offset_x_int = int(current_offset_x)
+        offset_y_int = int(current_offset_y)
         
-        # Extract visible region
+        offset_x_frac = current_offset_x - offset_x_int
+        offset_y_frac = current_offset_y - offset_y_int
+        
+        # Modulo to stay within large screen for the integer part
+        offset_x_int_mod = offset_x_int % screen_size
+        offset_y_int_mod = offset_y_int % screen_size
+        
+        # Extract visible region (integer aligned)
         current_screen = phase_screen_large[
-            offset_x_int:offset_x_int+screen_size,
-            offset_y_int:offset_y_int+screen_size
+            offset_x_int_mod:offset_x_int_mod+screen_size,
+            offset_y_int_mod:offset_y_int_mod+screen_size
         ]
         
         # Calculate phase delays for each telescope
+        # We shift the telescope mask by the fractional offset to compensate for the integer slicing
         for i in range(n_telescopes):
-            # Create circular mask for telescope
+            # Create circular mask for telescope with sub-pixel shift
             y_grid, x_grid = np.ogrid[:screen_size, :screen_size]
-            mask = ((x_grid - tel_pos_pix[i, 0])**2 + 
-                   (y_grid - tel_pos_pix[i, 1])**2 <= tel_radius_pix**2)
+            
+            # Center is shifted by +frac to "chase" the feature that hasn't moved yet in the integer slice
+            mask_center_x = tel_pos_pix[i, 0] + offset_x_frac
+            mask_center_y = tel_pos_pix[i, 1] + offset_y_frac
+            
+            mask = ((x_grid - mask_center_x)**2 + 
+                   (y_grid - mask_center_y)**2 <= tel_radius_pix**2)
             
             # Calculate mean phase over telescope
             if np.any(mask):
@@ -358,11 +374,19 @@ def get_delays(
             blit=False, repeat=True
         )
         
-        print("Displaying animation... (Close window to continue)")
-        try:
-            plt.show()
-        except Exception as e:
-            print(f"Animation display warning: {e}")
+        if save_as:
+            print(f"Saving animation to {save_as}...")
+            try:
+                anim.save(save_as, writer='pillow')
+                print(f"✅ Animation saved to {save_as}")
+            except Exception as e:
+                print(f"❌ Failed to save animation: {e}")
+        else:
+            print("Displaying animation... (Close window to continue)")
+            try:
+                plt.show()
+            except Exception as e:
+                print(f"Animation display warning: {e}")
         
     return delays, times
 
@@ -419,7 +443,8 @@ if __name__ == "__main__":
         wind_direction=45.0,
         time_step=0.05, 
         n_steps=200,    
-        demo=True
+        demo=True,
+        save_as="atmosphere_demo.gif"
     )
     
     print(f"\nPhase delay statistics:")
