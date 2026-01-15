@@ -222,16 +222,50 @@ def get_delays(
     delays = np.zeros((n_steps, n_telescopes))
     times = np.arange(n_steps) * time_step
     
-    # Initial screen positions
-    offset_x = 0.0
-    offset_y = 0.0
+    # Pre-calculate all delays (ALWAYS run this)
+    # This ensures we have data to return even if we don't show the animation
+    current_offset_x = 0.0
+    current_offset_y = 0.0
     
+    for step in range(n_steps):
+        # Update screen position
+        current_offset_x += dx_per_step
+        current_offset_y += dy_per_step
+        
+        # Modulo to stay within large screen
+        offset_x_int = int(current_offset_x) % screen_size
+        offset_y_int = int(current_offset_y) % screen_size
+        
+        # Extract visible region
+        current_screen = phase_screen_large[
+            offset_x_int:offset_x_int+screen_size,
+            offset_y_int:offset_y_int+screen_size
+        ]
+        
+        # Calculate phase delays for each telescope
+        for i in range(n_telescopes):
+            # Create circular mask for telescope
+            y_grid, x_grid = np.ogrid[:screen_size, :screen_size]
+            mask = ((x_grid - tel_pos_pix[i, 0])**2 + 
+                   (y_grid - tel_pos_pix[i, 1])**2 <= tel_radius_pix**2)
+            
+            # Calculate mean phase over telescope
+            if np.any(mask):
+                phase_mean_rad = np.mean(current_screen[mask])
+                # Convert to nanometers (OPD)
+                # OPD = (phi / 2pi) * lambda
+                delays[step, i] = phase_mean_rad * wavelength / (2 * np.pi) * 1e9
+            else:
+                delays[step, i] = 0.0
+
     # Animation if demo mode
     if demo:
         import matplotlib.pyplot as plt
         import matplotlib.animation as animation
         from matplotlib.patches import Circle
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+        
+        # Fixed layout info
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
         
         # Prepare figure for phase screen
         im = ax1.imshow(
@@ -241,7 +275,7 @@ def get_delays(
             cmap='RdBu_r',
             vmin=-3*np.std(phase_screen),
             vmax=3*np.std(phase_screen),
-            zorder=1  # Background layer
+            zorder=1
         )
         ax1.set_xlabel('Position X (m)')
         ax1.set_ylabel('Position Y (m)')
@@ -258,18 +292,17 @@ def get_delays(
                 telescope_diameter/2, 
                 fill=False, 
                 edgecolor='lime', 
-                linewidth=3,  # Thicker for visibility
-                zorder=3,  # In front of image
+                linewidth=2,
+                zorder=3,
                 label=f'Tel {i+1}' if i == 0 else ''
             )
             ax1.add_patch(circle)
             tel_circles.append(circle)
-        
-        # Add global title with parameters
+
+        # Add global title
         fig.suptitle(
-            f'Atmospheric Turbulence Simulation - λ = {wavelength*1e6:.2f} μm, r0 = {r0:.2f} m, Wind = {wind_speed:.1f} m/s',
-            fontsize=12,
-            fontweight='bold'
+            f'Atmospheric Turbulence Simulation\nλ = {wavelength*1e6:.2f} μm, r0 = {r0:.2f} m, Wind = {wind_speed:.1f} m/s',
+            fontsize=12, fontweight='bold'
         )
         
         # Prepare figure for delays
@@ -277,104 +310,60 @@ def get_delays(
         lines = []
         for i in range(n_telescopes):
             line, = ax2.plot([], [], '-o', color=colors[i], 
-                           label=f'Telescope {i+1}', markersize=3)
+                           label=f'Telescope {i+1}', markersize=2, alpha=0.7)
             lines.append(line)
         
         ax2.set_xlabel('Time (s)')
         ax2.set_ylabel('Phase Delay (nm)')
         ax2.set_title('Phase Delays per Telescope')
-        ax2.legend(loc='upper right')
+        ax2.legend(loc='upper right', fontsize='small')
         ax2.grid(True, alpha=0.3)
         
+        # Set limits
+        delay_min = np.min(delays)
+        delay_max = np.max(delays)
+        margin = (delay_max - delay_min) * 0.1 if delay_max > delay_min else 1.0
+        ax2.set_ylim(delay_min - margin, delay_max + margin)
+        ax2.set_xlim(0, times[-1])
+        
         def update_frame(frame):
-            nonlocal offset_x, offset_y
+            # Reconstruct screen position
+            # frame is 0-indexed step
+            # step k in loop corresponds to delays[k]
+            # Offset was updated at start of loop: (k+1)*dx
             
-            # Update screen position
-            offset_x += dx_per_step
-            offset_y += dy_per_step
+            off_x = (frame + 1) * dx_per_step
+            off_y = (frame + 1) * dy_per_step
             
-            # Modulo to stay within large screen
-            offset_x_int = int(offset_x) % screen_size
-            offset_y_int = int(offset_y) % screen_size
+            off_x_int = int(off_x) % screen_size
+            off_y_int = int(off_y) % screen_size
             
-            # Extract visible region
-            current_screen = phase_screen_large[
-                offset_x_int:offset_x_int+screen_size,
-                offset_y_int:offset_y_int+screen_size
+            current_vis_screen = phase_screen_large[
+                off_x_int:off_x_int+screen_size,
+                off_y_int:off_y_int+screen_size
             ]
             
-            # Calculate phase delays for each telescope
-            for i in range(n_telescopes):
-                # Create circular mask for telescope
-                y_grid, x_grid = np.ogrid[:screen_size, :screen_size]
-                mask = ((x_grid - tel_pos_pix[i, 0])**2 + 
-                       (y_grid - tel_pos_pix[i, 1])**2 <= tel_radius_pix**2)
-                
-                # Calculate mean phase over telescope
-                if np.any(mask):
-                    phase_mean_rad = np.mean(current_screen[mask])
-                    # Convert to nanometers (OPD)
-                    delays[frame, i] = phase_mean_rad * wavelength / (2 * np.pi) * 1e9
-                else:
-                    delays[frame, i] = 0.0
-            
             # Update display
-            im.set_data(current_screen)
+            im.set_data(current_vis_screen)
             
             # Update delay curves
             for i in range(n_telescopes):
                 lines[i].set_data(times[:frame+1], delays[:frame+1, i])
             
-            # Automatically adjust limits
-            if frame > 0:
-                ax2.set_xlim(0, times[frame])
-                delay_min = np.min(delays[:frame+1, :])
-                delay_max = np.max(delays[:frame+1, :])
-                margin = (delay_max - delay_min) * 0.1 if delay_max > delay_min else 1
-                ax2.set_ylim(delay_min - margin, delay_max + margin)
-            
             return [im] + lines + tel_circles
         
-        # Create animation
         anim = animation.FuncAnimation(
             fig, update_frame, frames=n_steps,
-            interval=time_step*1000, blit=False, repeat=True  # blit=False to show all elements
+            interval=min(50, max(1, int(time_step*1000))), 
+            blit=False, repeat=True
         )
         
-        plt.tight_layout()
+        print("Displaying animation... (Close window to continue)")
+        try:
+            plt.show()
+        except Exception as e:
+            print(f"Animation display warning: {e}")
         
-    else:
-        # Calculation without display
-        for step in range(n_steps):
-            # Update screen position
-            offset_x += dx_per_step
-            offset_y += dy_per_step
-            
-            # Modulo to stay within large screen
-            offset_x_int = int(offset_x) % screen_size
-            offset_y_int = int(offset_y) % screen_size
-            
-            # Extract visible region
-            current_screen = phase_screen_large[
-                offset_x_int:offset_x_int+screen_size,
-                offset_y_int:offset_y_int+screen_size
-            ]
-            
-            # Calculate phase delays for each telescope
-            for i in range(n_telescopes):
-                # Create circular mask for telescope
-                y_grid, x_grid = np.ogrid[:screen_size, :screen_size]
-                mask = ((x_grid - tel_pos_pix[i, 0])**2 + 
-                       (y_grid - tel_pos_pix[i, 1])**2 <= tel_radius_pix**2)
-                
-                # Calculate mean phase over telescope
-                if np.any(mask):
-                    phase_mean_rad = np.mean(current_screen[mask])
-                    # Convert to nanometers (OPD)
-                    delays[step, i] = phase_mean_rad * wavelength / (2 * np.pi) * 1e9
-                else:
-                    delays[step, i] = 0.0
-    
     return delays, times
 
 
@@ -385,30 +374,57 @@ if __name__ == "__main__":
 
     # Get telescope positions (example: UTs at Paranal)
     import astropy.units as u
-    r = np.array([[-70.4048732988764, -24.627602893919807], [-70.40465753243652, -24.627118902835786], [-70.40439460074228, -24.62681028261176], [-70.40384287956437, -24.627033500373024]])
-    r -= r[0]
+    
+    # Coordinates in (Longitude, Latitude) degrees
+    r_deg = np.array([
+        [-70.4048732988764, -24.627602893919807], 
+        [-70.40465753243652, -24.627118902835786], 
+        [-70.40439460074228, -24.62681028261176], 
+        [-70.40384287956437, -24.627033500373024]
+    ])
+    
+    # Reference (first telescope)
+    ref_pos = r_deg[0]
+    r_diff = r_deg - ref_pos # Differences in degrees
+    
     earth_radius = 6378137 * u.m
     UTs_elevation = 2635 * u.m
-    r = np.tan((r * u.deg).to(u.rad)) * (earth_radius + UTs_elevation)
+    R = earth_radius + UTs_elevation
+    
+    # Convert differences to meters
+    # x = dLon * R * cos(Lat)
+    # y = dLat * R
+    
+    lat_rad = np.radians(ref_pos[1])
+    d_lon_rad = np.radians(r_diff[:, 0])
+    d_lat_rad = np.radians(r_diff[:, 1])
+    
+    x_pos = d_lon_rad * R * np.cos(lat_rad)
+    y_pos = d_lat_rad * R
+    
+    # Combine into (x, y) array
+    telescope_positions_m = np.column_stack([x_pos.value, y_pos.value])
+
+    print(f"Telescope positions (center relative):\n{telescope_positions_m - np.mean(telescope_positions_m, axis=0)}")
     
     # Test with demo mode
     delays, times = get_delays(
         n_telescopes=4,
         telescope_diameter=8,
-        telescope_positions=r.to(u.m).value,
+        telescope_positions=telescope_positions_m,
         r0=0.8,  # Average seeing at 1.55 μm
         L0=25.0,
         wavelength=1.55e-6,
         wind_speed=10.0,
         wind_direction=45.0,
-        time_step=0.1,
-        n_steps=1000,
+        time_step=0.05, 
+        n_steps=200,    
         demo=True
     )
     
     print(f"\nPhase delay statistics:")
     print(f"  Array shape: {delays.shape}")
-    print(f"  Total duration: {times[-1]:.1f} s")
+    print(f"  Total duration: {times[-1]:.2f} s")
     print(f"  Global RMS: {np.std(delays):.2f} nm")
     for i in range(delays.shape[1]):
         print(f"  Telescope {i+1} - RMS: {np.std(delays[:, i]):.2f} nm")
