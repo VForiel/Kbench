@@ -117,12 +117,12 @@ class Cred3(metaclass=Singleton):
         
         return img
     
-    def crop_outputs_from_image(self, 
-                               img: np.ndarray, 
-                               crop_centers: np.ndarray, 
-                               crop_sizes=10) -> list[np.ndarray]:
+    def _crop_regions(self, 
+                     img: np.ndarray, 
+                     crop_centers: np.ndarray, 
+                     crop_sizes) -> list[np.ndarray]:
         """
-        Crop regions around specified centers from an image and return them.
+        Internal helper to crop regions from an image.
         
         Parameters
         ----------
@@ -130,17 +130,14 @@ class Cred3(metaclass=Singleton):
             Input image to crop from.
         crop_centers : ndarray
             Array of (x, y) coordinates for crop centers, shape (N, 2).
-        crop_sizes : int or tuple, optional
-            Size of the crop window. If int, a square window of this size
-            is used for all outputs. If tuple of length N, each output
-            gets its own crop size. Default is 10 pixels.
+        crop_sizes : int or array-like
+            Size(s) of the crop windows.
             
         Returns
         -------
         crops : list of ndarray
             List of cropped sub-images.
         """
-
         img = np.transpose(img)  # Transpose to match (x, y) indexing
         
         # Handle crop_sizes - convert to array
@@ -153,7 +150,7 @@ class Cred3(metaclass=Singleton):
                 raise ValueError(f"crop_sizes length ({len(crop_sizes_array)}) must match "
                                f"number of centers ({n_outputs})")
         
-        # Compute flux for each output
+        # Compute crops for each output
         crops = []
         for i in range(n_outputs):
             x_center, y_center = crop_centers[i]
@@ -167,41 +164,48 @@ class Cred3(metaclass=Singleton):
             y2 = int(y1 + crop_size)
             
             # Extract crop
-            # Handle boundary conditions to avoid errors if crop is outside image
             try:
                 crop = img[x1:x2, y1:y2]
                 crops.append(crop.T)
             except IndexError:
                 print(f"⚠️ Crop region {i} outside image boundaries")
-                # Append empty array or zeros matching size if possible, or None
-                # For robustness let's append a zero array of expected size
                 crops.append(np.zeros((crop_size, crop_size)))
         
         return [crop.copy() for crop in crops]
+    
+    def crop_outputs_from_image(self, img: np.ndarray) -> list[np.ndarray]:
+        """
+        Crop output regions from an image using configured centers and sizes.
+        
+        Parameters
+        ----------
+        img : ndarray
+            Input image to crop from.
+            
+        Returns
+        -------
+        crops : list of ndarray
+            List of cropped sub-images for each configured output.
+        """
+        if self.output_centers is None:
+            raise ValueError("output_centers not configured in phobos.config.cred3")
+        
+        return self._crop_regions(img, self.output_centers, self.output_sizes)
 
     def get_outputs(self,
-                   crop_centers: np.ndarray = None,
-                   crop_sizes = None,
                    subtract_dark: bool = True,
                    flux_mode: str = 'mean') -> np.ndarray:
         """
-        Get the flux around specified output centers.
+        Get the flux around configured output centers.
         
-        This method crops regions around specified centers and returns
-        the flux in each region. The flux can be the mean pixel value
+        This method crops regions around the output centers defined in the configuration
+        and returns the flux in each region. The flux can be the mean pixel value
         or the sum of pixel values.
         
         Parameters
         ----------
-        crop_centers : ndarray
-            Array of (x, y) coordinates for crop centers, shape (N, 2).
-        crop_sizes : int or tuple, optional
-            Size of the crop window. If int, a square window of this size
-            is used for all outputs. If tuple of length N, each output
-            gets its own crop size. Default is 10 pixels.
         subtract_dark : bool, optional
-            Whether to subtract dark frame. If None, uses initialization
-            default. Default is True.
+            Whether to subtract dark frame. Default is True.
         flux_mode : str, optional, 'mean' or 'sum'
             Method to compute the flux. 
             'mean': average of pixel values (default)
@@ -215,30 +219,23 @@ class Cred3(metaclass=Singleton):
         Examples
         --------
         >>> camera = Cred3()
-        >>> # Get averaged outputs with default centers
+        >>> # Get averaged outputs from configured centers
         >>> flux = camera.get_outputs()
         >>> 
         >>> # Get integrated flux (sum)
         >>> flux_sum = camera.get_outputs(flux_mode='sum')
-        >>> 
-        >>> # Custom centers and crop size
-        >>> centers = np.array([(100, 200), (300, 400)])
-        >>> flux = camera.get_outputs(crop_centers=centers, crop_sizes=20)
         """
-        # Use defaults from instance if not provided
+        # Use configured centers and sizes
+        crop_centers = self.output_centers
+        crop_sizes = self.output_sizes
+        
         if crop_centers is None:
-            if self.output_centers is not None:
-                crop_centers = self.output_centers
-            else:
-                raise ValueError("crop_centers must be provided either in get_outputs or during initialization.")
-                
-        if crop_sizes is None:
-            crop_sizes = self.output_sizes
+            raise ValueError("output_centers not configured. Please set them in phobos.config.cred3.output_centers")
             
         # Get the latest image
         img = self.get_image(subtract_dark=subtract_dark)
         
-        crops = self.crop_outputs_from_image(img, crop_centers=crop_centers, crop_sizes=crop_sizes)
+        crops = self.crop_outputs_from_image(img)
         
         # Compute flux
         flux = np.zeros(len(crops))
@@ -253,19 +250,13 @@ class Cred3(metaclass=Singleton):
         return flux
 
     def get_bulk(self,
-                crop_center: np.ndarray = None,
-                crop_size: int = None,
                 subtract_dark: bool = True,
                 flux_mode: str = 'mean') -> float:
         """
-        Get the flux of the bulk channel.
+        Get the flux of the bulk channel using configured center and size.
         
         Parameters
         ----------
-        crop_center : ndarray, optional
-            (x, y) coordinates for crop center. If None, uses self.bulk_center.
-        crop_size : int, optional
-            Size of the crop window. If None, uses self.bulk_size.
         subtract_dark : bool, optional
             Whether to subtract dark frame. Default is True.
         flux_mode : str, optional
@@ -276,24 +267,19 @@ class Cred3(metaclass=Singleton):
         flux : float
             Flux in the bulk region.
         """
-        # Use defaults if not provided
-        if crop_center is None:
-            if self.bulk_center is not None:
-                crop_center = self.bulk_center
-            else:
-                raise ValueError("crop_center must be provided either in get_bulk or during initialization (bulk_center).")
-                
-        if crop_size is None:
-            crop_size = self.bulk_size
+        # Use configured bulk values
+        if self.bulk_center is None:
+            raise ValueError("bulk_center not configured in phobos.config.cred3")
+        
+        crop_center = self.bulk_center
+        crop_size = self.bulk_size
 
         # Get the latest image
         img = self.get_image(subtract_dark=subtract_dark)
         
-        # Reuse crop_outputs_from_image but adapt inputs
-        # crop_outputs expects array of centers, so wrap center in list/array
+        # Use internal helper for cropping
         centers = np.array([crop_center])
-        
-        crops = self.crop_outputs_from_image(img, crop_centers=centers, crop_sizes=crop_size)
+        crops = self._crop_regions(img, centers, crop_size)
         
         if not crops:
             return 0.0

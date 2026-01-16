@@ -1365,29 +1365,26 @@ class _Arch:
         if verbose:
             print(f"✅ DAC calibration completed for {self.name} (channels {list(self.topas)}).")
     
-    def phase_calibration(self, samples: int, cred3_object, crop_centers, crop_sizes=10, plot: bool = False, verbose: bool = False):
+    def phase_calibration(self, samples: int, plot: bool = False, verbose: bool = False):
         """
         Calibrate phase-to-power conversion coefficients for all channels in this chip.
         
         This method scans each channel individually from 0 to 1.2W, measures the output flux
-        using the provided Cred3 camera object, fits a sinusoid to the response, and
+        using Cred3 camera, fits a sinusoid to the response, and
         updates the PHASE_CONVERSION coefficient based on the measured period.
         
         Parameters
         ----------
         samples : int
             Number of power steps for the scan.
-        cred3_object : Cred3
-            Instance of the Cred3 camera class.
-        crop_centers : list or ndarray
-            List of (x, y) coordinates for the output spots to monitor.
-        crop_sizes : int or tuple, optional
-            Size of the crop window. Default is 10.
         plot : bool, optional
             If True, plot the fitted curves. Default is False.
         verbose : bool, optional
             If True, print calibration details. Default is False.
         """
+        from .cred3 import Cred3
+        cred3 = Cred3()
+
         
         power_range = np.linspace(0, 1, samples)
         
@@ -1430,7 +1427,7 @@ class _Arch:
                 channel.set_power(p)
                 
                 # Get outputs
-                outs = cred3_object.get_outputs(crop_centers=crop_centers, crop_sizes=crop_sizes)
+                outs = cred3.get_outputs()
                 fluxes.append(outs)
             
             fluxes = np.array(fluxes) # Shape (n_samples, n_outputs)
@@ -1571,7 +1568,7 @@ class _Arch:
                     channel.set_phase(phase)
                     
                     # Get outputs
-                    outs = cred3_object.get_outputs(crop_centers=crop_centers, crop_sizes=crop_sizes)
+                    outs = cred3.get_outputs()
                     fluxes_phase.append(outs)
                 
                 fluxes_phase = np.array(fluxes_phase)  # Shape (n_samples, n_outputs)
@@ -1617,8 +1614,7 @@ class _Arch:
 
         return np.array(out_fluxes)
 
-    def characterize(self, dm_object, cred3_object, crop_centers, crop_sizes=10, 
-                    phase_samples=51, n_averages=10, plot=True, verbose=True):
+    def characterize(self, phase_samples=51, n_averages=10, plot=True, verbose=True):
         """
         Comprehensive characterization of the architecture with all input/shifter combinations.
         
@@ -1632,14 +1628,6 @@ class _Arch:
         
         Parameters
         ----------
-        dm_object : DM
-            Deformable mirror instance to control input blocking/unblocking.
-        cred3_object : Cred3
-            Camera instance for flux measurements.
-        crop_centers : array-like
-            Output spot centers for flux extraction.
-        crop_sizes : int, optional
-            Crop window size. Default is 10.
         phase_samples : int, optional
             Number of phase steps (0 to 2π). Default is 51.
         n_averages : int, optional
@@ -1667,6 +1655,11 @@ class _Arch:
           - active_inputs: which inputs were active
           - shifter_channel: which shifter was scanned
         """
+        from .deformable_mirror import DM
+        from .cred3 import Cred3
+        dm = DM()
+        cred3 = Cred3()
+
         if verbose:
             print(f"🔬 Starting full characterization of {self.name}...")
             print(f"   Inputs: {self.n_inputs}, Outputs: {self.n_outputs}, Shifters: {len(self.channels)}")
@@ -1716,8 +1709,8 @@ class _Arch:
                 print(f"\n📊 Scanning with {n_active} input(s) active: {active_inputs}")
             
             # Set DM: turn off all, then turn on selected inputs
-            dm_object.off()  # Turn off all inputs
-            dm_object.max(active_inputs)  # Turn on selected inputs
+            dm.off()  # Turn off all inputs
+            dm.max(active_inputs)  # Turn on selected inputs
             
             # Scan each shifter
             for shifter_idx, shifter in enumerate(self.channels):
@@ -1739,8 +1732,7 @@ class _Arch:
                     # Average multiple frames
                     temp_fluxes = []
                     for _ in range(n_averages):
-                        outs = cred3_object.get_outputs(crop_centers=crop_centers, 
-                                                       crop_sizes=crop_sizes)
+                        outs = cred3.get_outputs()
                         temp_fluxes.append(outs)
                     
                     fluxes.append(np.mean(temp_fluxes, axis=0))
@@ -1805,7 +1797,7 @@ class _Arch:
         
         # Turn everything off at the end
         self.turn_off(verbose=False)
-        dm_object.max()  # Restore all inputs
+        dm.max()  # Restore all inputs
         
         # Save consolidated archive
         archive_file = os.path.join(base_dir, "characterization_data.npz")
@@ -1814,8 +1806,8 @@ class _Arch:
         save_dict = {
             # Global metadata
             'metadata_n_outputs': self.n_outputs,
-            'metadata_crop_centers': crop_centers,
-            'metadata_crop_sizes': crop_sizes,
+            'metadata_crop_centers': cred3.output_centers.tolist() if cred3.output_centers is not None else None,
+            'metadata_crop_sizes': cred3.output_sizes,
             'metadata_n_averages': n_averages,
             'metadata_timestamp': timestamp,
             'metadata_arch_name': self.name,

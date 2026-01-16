@@ -30,10 +30,6 @@ class Arch15(Arch, metaclass=Singleton):
     
     def null_calibration_obs(
         self,
-        dm_object,
-        cred3_object,
-        crop_centers,
-        crop_sizes=10,
         n: int = 1_000,
         n_averages: int = 10,
         plot: bool = False,
@@ -50,14 +46,6 @@ class Arch15(Arch, metaclass=Singleton):
         
         Parameters
         ----------
-        dm_object : DM
-            Deformable mirror instance to control input blocking/unblocking.
-        cred3_object : Cred3
-            Camera instance for flux measurements.
-        crop_centers : array-like
-            Output spot centers for flux extraction (7 outputs expected).
-        crop_sizes : int, optional
-            Crop window size. Default is 10.
         n : int, optional
             Number of sampling points for least squares. Default is 1000.
         n_averages : int, optional
@@ -82,20 +70,20 @@ class Arch15(Arch, metaclass=Singleton):
         
         Examples
         --------
-        >>> from kbench import DM
         >>> from phobos import Arch15
-        >>> from phobos.classes.cred3 import Cred3
         >>> 
         >>> arch = Arch15()
-        >>> dm = DM()
-        >>> cam = Cred3()
-        >>> crop_centers = [[x1, y1], [x2, y2], ..., [x7, y7]]  # 7 outputs
-        >>> 
-        >>> arch.calibrate_obs(dm, cam, crop_centers, plot=True)
+        >>> arch.null_calibration_obs(plot=True)
         """
+        from ..deformable_mirror import DM
+        from ..cred3 import Cred3
         
-        if len(crop_centers) != 7:
-            raise ValueError(f"❌ Architecture 15 expects 7 output spots, got {len(crop_centers)}")
+        dm = DM()
+        cred3 = Cred3()
+        
+        # Get crop centers from config
+        if cred3.output_centers is None or len(cred3.output_centers) != 7:
+            raise ValueError(f"❌ Architecture 15 expects 7 output spots, got {len(cred3.output_centers) if cred3.output_centers is not None else 0}. Please configure phobos.config.cred3.output_centers")
         
         if plot and plt is not None:
             _, axs = plt.subplots(6, 3, figsize=figsize, constrained_layout=True)
@@ -130,7 +118,7 @@ class Arch15(Arch, metaclass=Singleton):
                 # Measure bright output (index 0)
                 temp_outs = []
                 for _ in range(n_averages):
-                    outs = cred3_object.get_outputs(crop_centers=crop_centers, crop_sizes=crop_sizes)
+                    outs = cred3.get_outputs()
                     temp_outs.append(outs[0])  # Bright output
                 y[i] = np.mean(temp_outs)
             
@@ -172,7 +160,7 @@ class Arch15(Arch, metaclass=Singleton):
                 # Measure outputs and compute kernel
                 temp_outs = []
                 for _ in range(n_averages):
-                    outs = cred3_object.get_outputs(crop_centers=crop_centers, crop_sizes=crop_sizes)
+                    outs = cred3.get_outputs()
                     # Kernel = |D_{2k-1}|² - |D_{2k}|²
                     # Outputs: [Bright, D1, D2, D3, D4, D5, D6]
                     # Kernels: K1 = D1 - D2, K2 = D3 - D4, K3 = D5 - D6
@@ -220,7 +208,7 @@ class Arch15(Arch, metaclass=Singleton):
                 # Measure dark pair sum
                 temp_outs = []
                 for _ in range(n_averages):
-                    outs = cred3_object.get_outputs(crop_centers=crop_centers, crop_sizes=crop_sizes)
+                    outs = cred3.get_outputs()
                     # Sum specified dark outputs (1-indexed to 0-indexed)
                     dark_sum = np.sum([outs[d] for d in dark_indices])
                     temp_outs.append(dark_sum)
@@ -254,30 +242,30 @@ class Arch15(Arch, metaclass=Singleton):
         
         # Bright maximization (single shifters with different input pairs)
         print("  [1/7] Maximizing bright with inputs 1,2 → shifter 2")
-        dm_object.off()
-        dm_object.max([1, 2])
+        dm.off()
+        dm.max([1, 2])
         maximize_bright(2, plt_coords=(0, 0))
         
         print("  [2/7] Maximizing bright with inputs 3,4 → shifter 4")
-        dm_object.off()
-        dm_object.max([3, 4])
+        dm.off()
+        dm.max([3, 4])
         maximize_bright(4, plt_coords=(0, 1))
         
         print("  [3/7] Maximizing bright with inputs 1,3 → shifter 7")
-        dm_object.off()
-        dm_object.max([1, 3])
+        dm.off()
+        dm.max([1, 3])
         maximize_bright(7, plt_coords=(0, 2))
         
         # Darks maximization
         print("  [4/7] Maximizing dark pair [1,2] with inputs 1,4 (inverted) → shifter 8")
-        dm_object.off()
-        dm_object.max([1, 4])  # Note: In simulation, input 4 is inverted (attenuation=-1)
+        dm.off()
+        dm.max([1, 4])  # Note: In simulation, input 4 is inverted (attenuation=-1)
         maximize_darks(8, [1, 2], plt_coords=(1, 0))
         
         # Kernel minimization (requires all inputs active)
         print("  [5/7] Minimizing kernel 1 with input 1 only → shifter 11")
-        dm_object.off()
-        dm_object.max([1])
+        dm.off()
+        dm.max([1])
         minimize_kernel(11, 1, plt_coords=(2, 0))
         
         print("  [6/7] Minimizing kernel 2 with input 1 only → shifter 13")
@@ -291,7 +279,7 @@ class Arch15(Arch, metaclass=Singleton):
         # Skipped for now as it requires knowing if setup is monochromatic or not
         
         # Restore all inputs
-        dm_object.max()
+        dm.max()
         
         if plot and plt is not None:
             axs[1, 1].axis('off')
@@ -305,10 +293,6 @@ class Arch15(Arch, metaclass=Singleton):
 
     def null_calibration_gen(
         self,
-        dm_object,
-        cred3_object,
-        crop_centers,
-        crop_sizes=10,
         beta: float = 0.8,
         verbose: bool = False,
         plot: bool = False,
@@ -322,30 +306,25 @@ class Arch15(Arch, metaclass=Singleton):
         
         Parameters
         ----------
-        dm_object : DM
-            Deformable mirror (kept for interface consistency, not explicitly used in loop unless needed).
-        cred3_object : Cred3
-            Camera instance.
-        crop_centers : array-like
-            Output spot centers.
-        crop_sizes : int
-            Crop window size.
-        beta : float
-            Decay factor for the step size (0.5 <= beta < 1).
-        verbose : bool
-            If True, print optimization progress.
-        plot : bool
-            If True, plot the optimization process.
-        figsize : tuple
-            Figure size for plots.
-        save_as : str
-            Path to save the plot if plot is True.
+        beta : float, optional
+            Decay factor for the step size (0.5 <= beta < 1). Default is 0.8.
+        verbose : bool, optional
+            If True, print optimization progress. Default is False.
+        plot : bool, optional
+            If True, plot the optimization process. Default is False.
+        figsize : tuple, optional
+            Figure size for plots. Default is (10, 10).
+        save_as : str, optional
+            Path to save the plot if plot is True. Default is None.
             
         Returns
         -------
         dict
             Dictionary with optimization history (depth, shifters).
         """
+        from ..cred3 import Cred3
+        
+        cred3 = Cred3()
 
         if beta < 0.5 or beta >= 1:
             raise ValueError("Beta must be in the range [0.5, 1[")
@@ -368,7 +347,7 @@ class Arch15(Arch, metaclass=Singleton):
         current_phases = [ch.get_phase() for ch in self.channels]
         
         def get_metrics_from_cam():
-            outs = cred3_object.get_outputs(crop_centers=crop_centers, crop_sizes=crop_sizes)
+            outs = cred3.get_outputs()
             # outs: [Bright, D1, D2, D3, D4, D5, D6]
             b = outs[0]
             

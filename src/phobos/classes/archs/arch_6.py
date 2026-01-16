@@ -507,7 +507,6 @@ class Arch6(Arch, metaclass=Singleton):
 
     def null_calibration_gen(
         self,
-        cred3_object,
         beta: float = 0.8,
         verbose: bool = False,
         plot: bool = False,
@@ -522,27 +521,39 @@ class Arch6(Arch, metaclass=Singleton):
         
         Parameters
         ----------
-        cred3_object : Cred3
-            Camera instance.
-        beta : float
-            Decay factor for the step size.
-        verbose : bool
-            If True, print optimization progress.
-        plot : bool
-            If True, plot the optimization process.
-        figsize : tuple
-            Figure size for plots.
-        save_as : str
-            Path to save the plot if plot is True.
+        beta : float, optional
+            Descent step size. Default is 0.8.
+        verbose : bool, optional
+            Print iteration details. Default is False.
+        plot : bool, optional
+            Plot calibration curves. Default is False.
+        figsize : tuple, optional
+            Figure size for plots. Default is (10, 10).
+        save_as : str, optional
+            Path to save the plot.
             
         Returns
         -------
-        dict
-            Dictionary with optimization history (depth, shifters).
-        """
+        np.ndarray
+            Optimized phase offsets (radians).
         
-        if beta < 0.5 or beta >= 1:
-            raise ValueError("Beta must be in the range [0.5, 1[")
+        Notes
+        -----
+        This method uses a simpler genetic algorithm (gradient descent on metrics)
+        rather than full genetic evolution.
+        
+        Examples
+        --------
+        >>> arch = Arch6()
+        >>> offsets = arch.null_calibration_gen(verbose=True, plot=True)
+        >>> arch.set_phases(offsets)  # Apply calibration
+        """
+        import phobos
+        from ..cred3 import Cred3
+        cred3 = Cred3()
+        
+        # Get bright output from config
+        bright_output = phobos.config.photonic_chip.bright_output
         
         # Initial step size
         ε = 1e-4 # Minimum shift step size in radians
@@ -559,7 +570,7 @@ class Arch6(Arch, metaclass=Singleton):
         current_phases = [ch.get_phase() for ch in self.channels]
         
         def get_metric():
-            outs = cred3_object.get_outputs()
+            outs = cred3.get_outputs()
             # Expected outs: [Bright, Null1, Null2, Null3]
             # Verify we have at least 4 outputs? 
             # Trusting user input on crop_centers for now.
@@ -769,10 +780,6 @@ class Arch6(Arch, metaclass=Singleton):
         # 1. Acquire Data
         if data_path is None:
             print("🚀 No data path provided. Running characterization...")
-            # Default args for characterization if not provided
-            if 'dm_object' not in kwargs or 'cred3_object' not in kwargs:
-                raise ValueError("dm_object and cred3_object are required for characterization.")
-            
             data_path = self.characterize(plot=False, **kwargs)
             print(f"📂 Data saved to: {data_path}")
             
@@ -1130,16 +1137,20 @@ class Arch6(Arch, metaclass=Singleton):
     def abcd_fringe_tracking(
         self,
         atmosphere_params: dict,
-        dm,
         dm_segments_indices: tuple,
-        cred3,
         input_indices: tuple = (0,1),
     ):
         """
         Simulate and correct atmospheric piston errors using ABCD Fringe Tracking on a classical nuller.
         """
+        from ..deformable_mirror import DM
+        from ..cred3 import Cred3
         # Import get_delays inside method to avoid potential circular imports
         from ...modules.atmosphere import get_delays
+        
+        # Instantiate singletons
+        dm = DM()
+        cred3 = Cred3()
         
         print("\n🔵 Starting ABCD Fringe Tracking Simulation (Hardware)")
         print("="*40)
