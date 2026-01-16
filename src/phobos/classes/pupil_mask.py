@@ -251,9 +251,22 @@ class PupilMask(metaclass=Singleton):
         """
         Reset the mask wheel to the 4 vertical holes and the Zaber motors to their home positions.
         """
+        # Refresh configuration
+        import phobos
+        cfg = phobos.config.hardware.pupil_mask
+        self.zaber_h_home = cfg.zaber_h_home
+        self.zaber_v_home = cfg.zaber_v_home
+        self.newport_home = cfg.newport_home
+
+        print(f"Resetting PupilMask: Wheel={self.newport_home}, ZH={self.zaber_h_home}, ZV={self.zaber_v_home}")
+        
+        # Don't use simple home_search for newport if we want to go to a specific 'home' angle
+        # But 'newport_home' is used as reference for masks.
+        # Original code used home_search() then apply_mask(4).
+        # apply_mask(4) uses newport_home.
         
         self.newport.home_search()
-        self.apply_mask(4)
+        self.apply_mask(4) # This uses self.newport_home
         self.zaber_h.move_abs(self.zaber_h_home)
         self.zaber_v.move_abs(self.zaber_v_home)
     

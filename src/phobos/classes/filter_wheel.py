@@ -20,11 +20,21 @@ class FilterWheel(metaclass=Singleton):
         import phobos
         cfg = phobos.config.hardware.filter_wheel
         
-        filter_port = cfg.port
+        
+        self.default_slot = getattr(cfg, 'default_slot', 1)
       
         self.session = serial.Serial(filter_port, 115200, timeout=0.1)
         
         print(f"Filter Wheel connected on port {filter_port}")
+        
+    def reset(self):
+        """
+        Reset the filter wheel to the default position defined in config.
+        """
+        # Reload default slot from dynamic config in case it changed
+        import phobos
+        self.default_slot = getattr(phobos.config.hardware.filter_wheel, 'default_slot', 1)
+        self.move(self.default_slot)
         
     def _purge(self):
         """

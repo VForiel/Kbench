@@ -36,6 +36,6 @@ hardware:
   pupil_mask:
     newport_home: 56.15
     newport_port: /dev/ttyUSBnewport
-    zaber_h_home: 188490
+    zaber_h_home: 150000
     zaber_port: /dev/ttyUSBzaber
-    zaber_v_home: 154402
+    zaber_v_home: 150000

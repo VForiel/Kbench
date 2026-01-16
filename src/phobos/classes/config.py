@@ -83,17 +83,18 @@ class Config:
             # Re-create attributes
             self._create_attributes(self._config_data)
             
-            # Update config path to point to this new file?
-            # The user user said "recover or force". 
-            # If we just import data, we might want to stay on current config_path 
-            # but with new data? Or switch to that path?
-            # Typically "import" implies bringing data IN.
-            # But the CLI "import" sets the path.
-            # Let's update the path to match CLI behavior if possible, 
-            # though CLI manages persistence in ~/.phobos.json.
-            self.config_path = os.path.abspath(path)
+            # Restore logic: Import copies the data into the MAIN config file.
+            # We do NOT keep the path of the imported file (especially if it's a backup).
+            self.config_path = os.path.join(self.root_dir, 'config', 'bench.yml')
             
-            print(f"✅ Configuration imported from {path}")
+            print(f"✅ Configuration data loaded from {path}")
+            print(f"   Targeting main config file: {self.config_path}")
+            
+            # Persist the imported data to the main config file
+            self.save()
+            
+            # Apply to hardware
+            self.apply()
             
         except Exception as e:
             print(f"❌ Error importing config: {e}")
@@ -117,6 +118,95 @@ class Config:
         except Exception as e:
             print(f"❌ Error exporting config: {e}")
 
+    def update(self):
+        """
+        Snapshot the current state of hardware components and save as configuration.
+        """
+        import phobos
+        print("💾 Snapshotting current hardware state...")
+        
+        # 1. PupilMask
+        # We assume if we snapshot, the current position IS the new 'home'
+        try:
+            pm = phobos.PupilMask()
+            wheel, zh, zv = pm.get_pos()
+            # Find which mask corresponds to 'wheel'? 
+            # Actually user probably wants to save 'newport_home'.
+            # But get_pos returns current angle.
+            # If we assume we are at mask 4 (default for reset), then newport_home = current - (4-1)*60
+            # This is tricky without knowing WHICH mask is active.
+            # But usually 'home' defines the angle of Mask 1.
+            # For now, let's assume we are updating the Zaber homes mostly?
+            # Or maybe we just snapshot 'state' separate from 'home'?
+            # User said "remet les états définit dans la config".
+            # If I save Config, reset() restores it.
+            # PupilMask.reset() goes to *home*.
+            # So updating Config should update *home* if we want reset() to go here?
+            # Let's assume current position is the new reference.
+            
+            self.hardware.pupil_mask.zaber_h_home = zh
+            self.hardware.pupil_mask.zaber_v_home = zv
+            # Updating newport_home is dangerous if we are not sure which mask is selected.
+            # Let's skip newport_home update for safety unless explicitly requested or deduced?
+            # We'll just update zabers for now as they are linear stages.
+            print(f"   Shape: PupilMask Zabers -> H:{zh}, V:{zv}")
+        except Exception as e:
+            print(f"   ⚠️ PupilMask update skipped: {e}")
+
+        # 2. FilterWheel
+        try:
+            fw = phobos.FilterWheel()
+            slot = fw.get_pos()
+            self.hardware.filter_wheel.default_slot = slot
+            print(f"   Shape: FilterWheel -> Slot {slot}")
+        except Exception as e:
+            print(f"   ⚠️ FilterWheel update skipped: {e}")
+
+        # 3. Cred3
+        try:
+            cam = phobos.Cred3()
+            self.hardware.cred3.use_dark = cam.use_dark
+            # We could save output_centers etc, but they are numpy arrays.
+            # Config needs lists.
+            if cam.output_centers is not None:
+                self.hardware.cred3.output_centers = cam.output_centers.tolist()
+            if cam.bulk_center is not None:
+                 self.hardware.cred3.bulk_center = cam.bulk_center.tolist()
+                 
+            print(f"   Shape: Cred3 -> use_dark={cam.use_dark}")
+        except Exception as e:
+             print(f"   ⚠️ Cred3 update skipped: {e}")
+            
+        # Save changes
+        self.save()
+        
+    def apply(self):
+        """
+        Apply configuration state to all hardware components.
+        """
+        import phobos
+        print("🚀 Applying configuration state to hardware...")
+        
+        # 1. PupilMask
+        try:
+            phobos.PupilMask().reset()
+        except Exception as e:
+            print(f"   ⚠️ PupilMask reset failed: {e}")
+            
+        # 2. FilterWheel
+        try:
+            phobos.FilterWheel().reset()
+        except Exception as e:
+            print(f"   ⚠️ FilterWheel reset failed: {e}")
+            
+        # 3. Cred3
+        try:
+            phobos.Cred3().reset()
+        except Exception as e:
+            print(f"   ⚠️ Cred3 reset failed: {e}")
+            
+        print("✅ Hardware reset complete.")
+        
     def save(self):
         """
         Save current configuration to file and create a history backup.
@@ -124,16 +214,16 @@ class Config:
         # 1. Update _config_data from attributes (in case of dot-notation changes)
         self._update_data_from_attributes()
         
-        # 2. Write to main config file
+        # 2. Create backup of the existing file (before overwriting)
+        self.backup()
+
+        # 3. Write to main config file
         try:
             with open(self.config_path, 'w') as f:
                 yaml.dump(self._config_data, f, default_flow_style=False)
             print(f"✅ Configuration saved to {self.config_path}")
         except Exception as e:
             print(f"❌ Error saving config file: {e}")
-            
-        # 3. Create backup
-        self.backup()
 
     def backup(self):
         """

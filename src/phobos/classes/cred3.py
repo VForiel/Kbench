@@ -428,3 +428,36 @@ class Cred3(metaclass=Singleton):
         """
         # Shared memory objects don't need explicit closing in xaosim
         print("Cred3 camera interface closed")
+
+    def reset(self):
+        """
+        Reset camera parameters to configuration defaults.
+        """
+        import phobos
+        cfg = phobos.config.hardware.cred3
+        
+        # Restore use_dark
+        self.use_dark = cfg.use_dark
+        # Re-apply dark mechanism
+        if self.use_dark:
+             if self.dark_shm_obj is None:
+                  try:
+                      self.dark_shm_obj = shm(self.dark_shm_path)
+                      self.dark = self.dark_shm_obj.get_latest_data()
+                  except Exception:
+                      pass
+        else:
+             self.dark = None
+             
+        # Restore crop settings
+        self.output_centers = np.array(cfg.output_centers) if cfg.output_centers else None
+        
+        if self.output_centers is not None and isinstance(cfg.output_sizes, (int, float)):
+             self.output_sizes = [cfg.output_sizes] * len(self.output_centers)
+        else:
+             self.output_sizes = cfg.output_sizes
+             
+        self.bulk_center = np.array(cfg.bulk_center) if cfg.bulk_center else None
+        self.bulk_size = cfg.bulk_size
+        
+        print("✅ Cred3 reset to configuration defaults.")

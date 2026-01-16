@@ -108,6 +108,14 @@ def load_or_create_config():
     if should_review:
         print("\n🧐 Reviewing Configuration:")
         print("   Please confirm or modify each setting.")
+        
+        # Backup before review/modification
+        print("💾 Backing up current configuration...")
+        try:
+            phobos.config.backup()
+        except Exception as e:
+            print(f"⚠️  Backup failed: {e}")
+            
         recursive_review(config)
     
     # Save updated config
@@ -150,12 +158,7 @@ def main():
     print("🧪 PHOBos Bench Setup Script")
     print("="*60)
     
-    # Backup existing configuration
-    print("💾 Backing up current configuration...")
-    try:
-        phobos.config.backup()
-    except Exception as e:
-        print(f"⚠️  Backup failed: {e}")
+    # Backup existing configuration -> Moved to load_or_create_config (conditional)
 
     config = load_or_create_config()
     
