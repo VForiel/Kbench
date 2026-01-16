@@ -1440,10 +1440,11 @@ class Arch6(Arch, metaclass=Singleton):
         bright_output_index = 0 # Default value
 
         if bright_output_index == 0 and hasattr(self, 'abcd') and key in self.abcd and self.abcd[key] is not None:
-             bright_output_index = self.abcd[key][0]
-        else:
-             from ... import config
-             bright_output_index = config.hardware.photonic_chip.bright_output
+            if self.bright_output_index is None:
+             import phobos
+             config = phobos.config
+             bright_output_index = config.photonic_chip.bright_output
+             self.bright_output_index = bright_output_index
         
         bright_idx = bright_output_index
 

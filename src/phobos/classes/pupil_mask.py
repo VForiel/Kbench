@@ -38,13 +38,15 @@ class PupilMask(metaclass=Singleton):
         """
         # Lazy import
         import phobos
-        cfg = phobos.config.hardware.pupil_mask
+        cfg = phobos.config.pupil_mask
         
         zaber_port = cfg.zaber_port
         newport_port = cfg.newport_port
-        zaber_h_home = cfg.zaber_h_home
-        zaber_v_home = cfg.zaber_v_home
+        zaber_h_pos = getattr(cfg, 'zaber_h_pos', 0)
+        zaber_v_pos = getattr(cfg, 'zaber_v_pos', 0)
         newport_home = cfg.newport_home
+        self.selected_mask = getattr(cfg, 'selected_mask', 4)
+        
         # Optional reset, default False if not in config
         reset = getattr(cfg, 'reset', False)
 
@@ -52,8 +54,8 @@ class PupilMask(metaclass=Singleton):
         zaber_session = serial.Serial(zaber_port, 115200, timeout=0.1)
         newport_session = serial.Serial(newport_port, 921600, timeout=0.1)
 
-        self.zaber_h_home = zaber_h_home
-        self.zaber_v_home = zaber_v_home
+        self.zaber_h_pos = zaber_h_pos
+        self.zaber_v_pos = zaber_v_pos
         self.newport_home = newport_home
 
         # Initialize the Zaber and Newport objects
@@ -249,26 +251,30 @@ class PupilMask(metaclass=Singleton):
 
     def reset(self) -> None:
         """
-        Reset the mask wheel to the 4 vertical holes and the Zaber motors to their home positions.
+        Reset the mask wheel and Zaber motors to the positions defined in the configuration.
+        
+        This method reloads the current 'pupil_mask' configuration settings 
+        (newport_home, zaber_h_home, zaber_v_home) and moves the hardware accordingly.
         """
         # Refresh configuration
         import phobos
-        cfg = phobos.config.hardware.pupil_mask
-        self.zaber_h_home = cfg.zaber_h_home
-        self.zaber_v_home = cfg.zaber_v_home
+        cfg = phobos.config.pupil_mask
+        self.zaber_h_pos = getattr(cfg, 'zaber_h_pos', 0)
+        self.zaber_v_pos = getattr(cfg, 'zaber_v_pos', 0)
         self.newport_home = cfg.newport_home
+        self.selected_mask = getattr(cfg, 'selected_mask', 4)
 
-        print(f"Resetting PupilMask: Wheel={self.newport_home}, ZH={self.zaber_h_home}, ZV={self.zaber_v_home}")
-        
-        # Don't use simple home_search for newport if we want to go to a specific 'home' angle
-        # But 'newport_home' is used as reference for masks.
-        # Original code used home_search() then apply_mask(4).
-        # apply_mask(4) uses newport_home.
+        print(f"Resetting PupilMask: Mask={self.selected_mask}, ZH={self.zaber_h_pos}, ZV={self.zaber_v_pos}")
         
         self.newport.home_search()
-        self.apply_mask(4) # This uses self.newport_home
-        self.zaber_h.move_abs(self.zaber_h_home)
-        self.zaber_v.move_abs(self.zaber_v_home)
+        
+        # Calculate angle for selected mask
+        # Masks are 1-indexed (1 to 6). Separation is 60 degrees.
+        mask_angle = self.newport_home + (self.selected_mask - 1) * 60
+        self.rotate(mask_angle, abs=True)
+        
+        self.zaber_h.move_abs(self.zaber_h_pos)
+        self.zaber_v.move_abs(self.zaber_v_pos)
     
 #==============================================================================
 # Zaber Class

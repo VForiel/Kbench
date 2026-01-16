@@ -50,38 +50,37 @@ def recursive_review(config_data, prefix=""):
 def load_or_create_config():
     import phobos
     default_config = {
-        'hardware': {
-            'dm': {
-                'serial_number': "27BW007#051",
-                'config_path': "./config/DM/DM_config.json",
-                'stabilization_time': 0.001,
-                'injection_segments': [138, 137, 136, 135]
-            },
-            'camera': {
-                'img_shm_path': "/dev/shm/cred1.im.shm",
-                'dark_shm_path': "/dev/shm/cred3_dark.im.shm",
-                'semid': 0,
-                'use_dark': True,
-                'output_centers': [[0, 0], [0, 0], [0, 0], [0, 0]],
-                'output_sizes': 10,
-                'bulk_center': [0, 0],
-                'bulk_size': 10
-            },
-            'pupil_mask': {
-                'zaber_port': "/dev/ttyUSBzaber",
-                'newport_port': "/dev/ttyUSBnewport",
-                'zaber_h_home': 188490,
-                'zaber_v_home': 154402,
-                'newport_home': 56.15
-            },
-            'filter_wheel': {
-                'port': "/dev/ttyUSBthorlabs"
-            },
-            'photonic_chip': {
-                'driver_port_match': "2341:8036",
-                'arch': 6,
-                'bright_output': 2
-            }
+        'dm': {
+            'serial_number': "27BW007#051",
+            'config_path': "./config/DM/DM_config.json",
+            'stabilization_time': 0.001,
+            'injection_segments': [138, 137, 136, 135]
+        },
+        'camera': {
+            'img_shm_path': "/dev/shm/cred1.im.shm",
+            'dark_shm_path': "/dev/shm/cred3_dark.im.shm",
+            'semid': 0,
+            'use_dark': True,
+            'output_centers': [[0, 0], [0, 0], [0, 0], [0, 0]],
+            'output_sizes': 10,
+            'bulk_center': [0, 0],
+            'bulk_size': 10
+        },
+        'pupil_mask': {
+            'zaber_port': "/dev/ttyUSBzaber",
+            'newport_port': "/dev/ttyUSBnewport",
+            'zaber_h_pos': 188490,
+            'zaber_v_pos': 154402,
+            'selected_mask': 4,
+            'newport_home': 56.15
+        },
+        'filter_wheel': {
+            'port': "/dev/ttyUSBthorlabs"
+        },
+        'photonic_chip': {
+            'driver_port_match': "2341:8036",
+            'arch': 6,
+            'bright_output': 2
         }
     }
 
@@ -158,13 +157,29 @@ def main():
     print("🧪 PHOBos Bench Setup Script")
     print("="*60)
     
-    # Backup existing configuration -> Moved to load_or_create_config (conditional)
-
+    # 0. Backup & Config
     config = load_or_create_config()
     
-    # 1. Preparation & Dark Frames
+    # 1. Camera Server
+    print("\n🖥️  CAMERA SERVER")
+    cam_server_launched = launch_camera_server()
+    
+    if not cam_server_launched:
+        print("\n⚠️  Automatic server launch failed.")
+        print("👉 Please manually launch the camera server in a separate terminal.")
+        cmd = "cd ~/Progs/repos/dcs/asgard-cred1-server && /opt/EDTpdv/initcam -f cred3_edt_config.cfg && ./asgard_cam_server"
+        print(f"   Command: {cmd}")
+        prompt_step("Confirm ONLY when the camera server is running properly")
+        
+    # Prompt for "fetch" regardless of launch method
+    print("\n📩 IMAGE ACQUISITION")
+    print("👉 In the camera server terminal, please type 'fetch' and press Enter to start acquiring images.")
+    prompt_step("Confirm when 'fetch' is running and images are scrolling")
+
+    # 3. Preparation & Dark Frames
     print("\n🌑 PREPARATION")
-    prompt_step("Turn OFF the lab lights and ensure the Laser Source is OFF")
+    print("   We will now take dark frames. This requires the camera server to be fetching images.")
+    prompt_step("Turn OFF the lab lights and ensure the Laser Source is blocked/OFF")
     
     print("\n📸 Acquiring Dark Frames...")
     try:
@@ -177,24 +192,23 @@ def main():
     except Exception as e:
         print(f"❌ Error acquiring dark frames: {e}")
         print("   (Continuing setup, but check camera...)")
+    
+    # 4. Apply Configuration (Restore Hardware State)
+    print("\n🔄 Applying configuration to hardware...")
+    try:
+        phobos.config.apply()
+    except Exception as e:
+        print(f"⚠️  Configuration application failed: {e}")
 
-    # 2. Manual Power-Up
+    # 5. Manual Power-Up
     print("\n⚡ MANUAL POWER-UP SEQUENCE")
     print("   Please perform the following steps:")
     print("   1. Switch on the Generator for XPOW")
     print("   2. Switch on the Photonic Chip Driver (XPOW) itself")
     print("   3. Switch on the Laser Source")
     prompt_step("Confirm when ALL steps above are completed")
-    
-    # 3. Camera Server
-    print("\n🖥️  CAMERA SERVER")
-    cam_server_launched = launch_camera_server()
-    
-    if cam_server_launched:
-        print("\n✅ Setup Complete! The bench should be ready.")
-    else:
-        print("\n⚠️  Setup partial. Some automated steps failed.")
-        print("👉 Please manually launch the camera server (see above) to finalize setup.")
+        
+    print("\n✅ Setup Complete! The bench should be ready.")
 
 if __name__ == "__main__":
     import phobos

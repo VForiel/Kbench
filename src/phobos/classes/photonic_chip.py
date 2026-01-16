@@ -73,13 +73,64 @@ class XPOW(metaclass=Singleton):
     # Default: 2π phase shift at 0.6W → 0.6/(2π) ≈ 0.095 W/rad
     PHASE_CONVERSION = np.ones(N_CHANNELS) * (0.6 / (2 * np.pi))
     
-    
     def __init__(self):
         """Initialize XPOW controller."""
         if hasattr(self, '_initialized'): return
         self._initialized = True
+        self.connect()
 
-    
+        # Hardware verification (requested by user)
+        # Check Channel 1 response (Assuming "Channel 0" in request meant first channel)
+        if not SANDBOX_MODE:
+            try:
+                # 1. Set 300mA, 10V
+                self.send_command("CH:1:CUR:300", verbose=False)
+                self.send_command("CH:1:VOLT:10", verbose=False)
+                
+                # 2. Check V > 5
+                res = self.send_command("CH:1:VAL?", verbose=False)
+                # Parse response explicitly
+                match = re.search(r'=\s*([\d\.]+)V', res)
+                if not match:
+                     raise ValueError(f"Invalid response format: {res}")
+                v_meas = float(match.group(1))
+                
+                if v_meas <= 5.0:
+                     raise ConnectionError(f"Voltage check failed. Expected > 5V, got {v_meas}V.")
+                     
+                # 3. Set 0V
+                self.send_command("CH:1:VOLT:0", verbose=False)
+                
+                # 4. Check V < 5
+                res = self.send_command("CH:1:VAL?", verbose=False)
+                # Parse response explicitly
+                match = re.search(r'=\s*([\d\.]+)V', res)
+                v_meas = float(match.group(1))
+                
+                if v_meas >= 5.0:
+                     raise ConnectionError(f"Voltage reset failed. Expected < 5V, got {v_meas}V.")
+                     
+                print("✅ XPOW power supply verification passed.")
+                
+            except Exception as e:
+                # Cleanup before raising
+                self.send_command("CH:1:CUR:0", verbose=False)
+                self.send_command("CH:1:VOLT:0", verbose=False)
+                
+                err_msg = (
+                    f"\n❌ XPOW Verification Failed: {e}\n"
+                    "👉 PLEASE FOLLOW THESE STEPS:\n"
+                    "   1. Turn OFF the XPOW unit.\n"
+                    "   2. Ensure the GENERATOR is turned ON.\n"
+                    "   3. Turn ON the XPOW unit.\n"
+                    "   4. RESTART the Python kernel."
+                )
+                raise ConnectionError(err_msg) from e
+            finally:
+                # Always reset to 0 current/voltage after test
+                self.send_command("CH:1:CUR:0", verbose=False)
+                self.send_command("CH:1:VOLT:0", verbose=False)
+
     def __getattr__(self, name):
         """Handle deprecated method calls with warnings."""
         if name == 'update_all_coeffs':
@@ -2119,7 +2170,7 @@ def get_chip() -> _Arch:
     import phobos
     import importlib
     
-    arch_num = phobos.config.hardware.photonic_chip.arch
+    arch_num = phobos.config.photonic_chip.arch
     
     # Import the specific architecture module
     # Assumes file naming convention: phobos.classes.archs.arch_N

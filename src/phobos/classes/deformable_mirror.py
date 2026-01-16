@@ -19,14 +19,20 @@ class DM(metaclass=Singleton):
     """
 
     _default_config_path = "./config/DM/DM_config.json"
+    _initialized = False
 
     def __init__(self):
         """
         Initialize the DM using global configuration.
         """
+        if self._initialized:
+            return
+            
+        self._initialized = True
+        
         # Lazy import to avoid circular dependency
         import phobos
-        cfg = phobos.config.hardware.dm
+        cfg = phobos.config.dm
         
         serial_number = cfg.serial_number
         config_path = cfg.config_path

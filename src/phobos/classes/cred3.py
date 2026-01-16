@@ -11,19 +11,31 @@ class Cred3(metaclass=Singleton):
     The camera writes frames to a shared memory location that can be read
     by this class. Optionally, dark frames can be subtracted.
     
-    Configuration is loaded from `phobos.config.hardware.cred3`.
+    Configuration is loaded from `phobos.config.cred3`.
     """
+    _instance = None
     
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(Cred3, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
     def __init__(self):
         """
         Initialize the Cred3 camera interface using global configuration.
         """
+        if self._initialized:
+            return
+            
+        self._initialized = True
+
         if SANDBOX_MODE:
             print("⛱️ [SANDBOX] Cred3 running in mock mode")
         
-        # Lazy import to avoid circular dependency
+        # Load configuration
         import phobos
-        cfg = phobos.config.hardware.cred3
+        cfg = phobos.config.cred3
         
         self.img_shm_path = cfg.img_shm_path
         self.dark_shm_path = cfg.dark_shm_path
@@ -431,12 +443,12 @@ class Cred3(metaclass=Singleton):
 
     def reset(self):
         """
-        Reset camera parameters to configuration defaults.
+        Reset the camera settings (use_dark, outputs strategies) to the configuration.
         """
+        # Refresh configuration
         import phobos
-        cfg = phobos.config.hardware.cred3
+        cfg = phobos.config.cred3
         
-        # Restore use_dark
         self.use_dark = cfg.use_dark
         # Re-apply dark mechanism
         if self.use_dark:

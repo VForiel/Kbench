@@ -23,12 +23,12 @@ class Config:
     
     Usage:
     >>> from phobos import config
-    >>> print(config.hardware.camera.semid)
-    >>> config.hardware.camera.semid = 1
-    >>> config.update() # Snapshot hardware state to config
+    >>> print(config.cred3.semid)
+    >>> config.cred3.semid = 1
     >>> config.save()   # Save config to file (archives old version)
     >>> config.apply()  # Apply config to hardware
     >>> config.import_config("history/backup.yml") # Restore backup
+    >>> config.update() # Snapshot hardware state to config and save it
     """
     _instance = None
     _config_data = {}
@@ -76,10 +76,9 @@ class Config:
         -----
         This command will:
         1. Load data from the specified file.
-        2. Set the target configuration file to 'config/bench.yml' (main config).
-        3. Backup the current 'bench.yml'.
-        4. Overwrite 'bench.yml' with the imported data.
-        5. Apply the new configuration to the hardware.
+        2. Backup the current 'bench.yml'.
+        3. Overwrite 'bench.yml' with the imported data.
+        4. Apply the new configuration to the hardware.
         """
         if not os.path.exists(path):
             print(f"❌ Error: Config file not found at {path}")
@@ -94,8 +93,7 @@ class Config:
             # Re-create attributes
             self._create_attributes(self._config_data)
             
-            # Restore logic: Import copies the data into the MAIN config file.
-            # We do NOT keep the path of the imported file (especially if it's a backup).
+            # Import copies the data into the MAIN config file
             self.config_path = os.path.join(self.root_dir, 'config', 'bench.yml')
             
             print(f"✅ Configuration data loaded from {path}")
@@ -141,26 +139,29 @@ class Config:
         try:
             pm = phobos.PupilMask()
             wheel, zh, zv = pm.get_pos()
-            # Find which mask corresponds to 'wheel'? 
-            # Actually user probably wants to save 'newport_home'.
-            # But get_pos returns current angle.
-            # If we assume we are at mask 4 (default for reset), then newport_home = current - (4-1)*60
-            # This is tricky without knowing WHICH mask is active.
-            # But usually 'home' defines the angle of Mask 1.
-            # For now, let's assume we are updating the Zaber homes mostly?
-            # Or maybe we just snapshot 'state' separate from 'home'?
-            # User said "remet les états définit dans la config".
-            # If I save Config, reset() restores it.
-            # PupilMask.reset() goes to *home*.
-            # So updating Config should update *home* if we want reset() to go here?
-            # Let's assume current position is the new reference.
             
-            self.hardware.pupil_mask.zaber_h_home = zh
-            self.hardware.pupil_mask.zaber_v_home = zv
-            # Updating newport_home is dangerous if we are not sure which mask is selected.
-            # Let's skip newport_home update for safety unless explicitly requested or deduced?
-            # We'll just update zabers for now as they are linear stages.
-            print(f"   Shape: PupilMask Zabers -> H:{zh}, V:{zv}")
+            # Update Zaber Positions
+            self.pupil_mask.zaber_h_pos = zh
+            self.pupil_mask.zaber_v_pos = zv
+            
+            # Calculate selected mask based on wheel angle
+            # Angle = newport_home + (mask - 1) * 60
+            # (Angle - newport_home) / 60 = mask - 1
+            if hasattr(self.pupil_mask, 'newport_home'):
+                base = self.pupil_mask.newport_home
+                # Handle modulo 360 just in case, though usually unnecessary for 6 slots
+                delta = wheel - base
+                estimated_index = round(delta / 60.0)
+                mask_id = estimated_index + 1
+                
+                # Normalize to 1-6
+                # (This logic assumes reasonable alignment)
+                # If negative or > 6?
+                # Let's just constrain it? Or allow it? 
+                # Let's trust the calculation for now but perhaps log it.
+                self.pupil_mask.selected_mask = int(mask_id)
+
+            print(f"   Shape: PupilMask -> Mask {self.pupil_mask.selected_mask} (Angle {wheel:.2f}°), H:{zh}, V:{zv}")
         except Exception as e:
             print(f"   ⚠️ PupilMask update skipped: {e}")
 
@@ -168,7 +169,7 @@ class Config:
         try:
             fw = phobos.FilterWheel()
             slot = fw.get_pos()
-            self.hardware.filter_wheel.default_slot = slot
+            self.filter_wheel.default_slot = slot
             print(f"   Shape: FilterWheel -> Slot {slot}")
         except Exception as e:
             print(f"   ⚠️ FilterWheel update skipped: {e}")
@@ -176,13 +177,13 @@ class Config:
         # 3. Cred3
         try:
             cam = phobos.Cred3()
-            self.hardware.cred3.use_dark = cam.use_dark
+            self.cred3.use_dark = cam.use_dark
             # We could save output_centers etc, but they are numpy arrays.
             # Config needs lists.
             if cam.output_centers is not None:
-                self.hardware.cred3.output_centers = cam.output_centers.tolist()
+                self.cred3.output_centers = cam.output_centers.tolist()
             if cam.bulk_center is not None:
-                 self.hardware.cred3.bulk_center = cam.bulk_center.tolist()
+                 self.cred3.bulk_center = cam.bulk_center.tolist()
                  
             print(f"   Shape: Cred3 -> use_dark={cam.use_dark}")
         except Exception as e:

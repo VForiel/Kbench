@@ -14,18 +14,24 @@ class FilterWheel(metaclass=Singleton):
             - 5: ND?
             - 6: ND?
         
-        Configuration loaded from `phobos.config.hardware.filter_wheel`.
+        Configuration loaded from `phobos.config.filter_wheel`.
         """
-        # Lazy import
         import phobos
-        cfg = phobos.config.hardware.filter_wheel
+        # Load config
+        cfg = phobos.config.filter_wheel
+        port = cfg.port
         
-        
-        self.default_slot = getattr(cfg, 'default_slot', 1)
-      
-        self.session = serial.Serial(filter_port, 115200, timeout=0.1)
-        
-        print(f"Filter Wheel connected on port {filter_port}")
+        try:
+            # super().__init__(port) # This line is commented out as it's not in the original context
+            self.session = serial.Serial(port, 115200, timeout=0.1) # Modified to use 'port' from config
+            print(f"Filter Wheel connected on port {port}") # Modified to use 'port' from config
+            self._connected = True
+        except Exception as e:
+            if not os.environ.get("PHOBOS_SANDBOX"):
+                 print(f"⚠️ FilterWheel connection failed: {e}")
+            self._connected = False
+
+        self.default_slot = getattr(phobos.config.filter_wheel, 'default_slot', 1)
         
     def reset(self):
         """
@@ -33,7 +39,7 @@ class FilterWheel(metaclass=Singleton):
         """
         # Reload default slot from dynamic config in case it changed
         import phobos
-        self.default_slot = getattr(phobos.config.hardware.filter_wheel, 'default_slot', 1)
+        self.default_slot = getattr(phobos.config.filter_wheel, 'default_slot', 1) # Changed hardware.filter_wheel to filter_wheel
         self.move(self.default_slot)
         
     def _purge(self):

@@ -212,13 +212,16 @@ def control_config(args):
         print("Usage: phob config [path]")
         print("       phob config create [path]")
         print("       phob config [command] [options]")
-        print("       phob config [equipment] [action] [name]")
-        print("       phob config import [path]    # Set active config file")
+        print("       phob config import [path]    # Restore config from backup/file")
         print("       phob config export [path]    # Save copy of current config")
         
         print("\n📁 File Management:")
         print("  [path]         Set active configuration file (.yml/.json)")
         print("  create [path]  Create new configuration interactively")
+        
+        print("\n🔄 State Management:")
+        print("  update         Snapshot current hardware state to config file")
+        print("  apply          Apply configuration state to hardware")
         print("  save           Save current configuration to file (and backup)")
         
         print("\n📋 Information:")
@@ -226,20 +229,12 @@ def control_config(args):
         print("  -h, --help     Show this help message")
         print("  -r, --reset    Reset to default (no configuration)")
         
-        print("\n📐 Mask Management:")
-        print("  mask add [name]     Save current mask position with name")
-        print("  mask remove [name]  Remove saved mask configuration")
-        print("  mask list           Show all configured mask positions")
-        
-        print("\n🔍 Filter Management:")
-        print("  filter add [name]     Save current filter position with name")
-        print("  filter remove [name]  Remove saved filter configuration")
-        print("  filter list           Show all configured filter positions")
-        
+
         print("\n💡 Examples:")
         print("  phob config create my_setup.yml    # Interactive setup")
         print("  phob config my_setup.yml           # Use configuration")
-        print("  phob config mask add \"center\"       # Save current position")
+        print("  phob config update                 # Save hardware state")
+        print("  phob config apply                  # Reset hardware to config")
 
     # Invalid command ---------------------------------------------------------
 
@@ -288,6 +283,15 @@ def control_config(args):
     if command == 'save':
         phobos.config.save()
         sys.exit(0)
+    
+    if command == 'update':
+        phobos.config.update()
+        # update() saves internally
+        sys.exit(0)
+        
+    if command == 'apply':
+        phobos.config.apply()
+        sys.exit(0)
 
     if command == 'export':
         if len(args) < 2:
@@ -305,16 +309,9 @@ def control_config(args):
             sys.exit(1)
         
         path = args[1]
-        if os.path.exists(path) and (path.endswith('.json') or path.endswith('.yml') or path.endswith('.yaml')):
-             print(f"⌛ Importing configuration from {path}...")
-             CONFIG['config_path'] = os.path.abspath(path)
-             with open(CONFIG_FILE, "w") as f:
-                 json.dump(CONFIG, f, indent=4)
-             print("✅ Configuration active set to imported file.")
-             sys.exit(0)
-        else:
-             print(f"❌ Error: Invalid config file '{path}'")
-             sys.exit(1)
+        # Use config class import logic
+        phobos.config.import_config(path)
+        sys.exit(0)
 
     # Create ------------------------------------------------------------------
 
@@ -351,16 +348,24 @@ def control_config(args):
         
         # Create configuration structure
         config = {
-            'mask': {
-                'ports': {
-                    'newport': newport_port,
-                    'zaber': zaber_port
-                },
-                'slots': {}
+            'pupil_mask': {
+                'newport_port': newport_port,
+                'zaber_port': zaber_port,
+                'newport_home': 56.15,
+                'zaber_h_pos': 0,
+                'zaber_v_pos': 0,
+                'selected_mask': 4
             },
-            'filter': {
+            'filter_wheel': {
                 'port': filter_port,
-                'slots': {}
+                'default_slot': 1
+            },
+            'dm': {
+                 'serial_number': "27BW007#051",
+                 'config_path': "./config/DM/DM_config.json"
+            },
+            'camera': {
+                 'semid': 0
             }
         }
         
@@ -385,221 +390,13 @@ def control_config(args):
         
         sys.exit(0)
 
-    # Mask management ---------------------------------------------------------
-
-    if args[0] in ['mask']:
-        if not is_config_set():
-            print("❌ Error: No configuration file set. Please set a config file first.")
-            sys.exit(1)
-        
-        control_mask_config(args[1:])
-        sys.exit(0)
-
-    # Filter management ------------------------------------------------------
-
-    if args[0] in ['filter']:
-        if not is_config_set():
-            print("❌ Error: No configuration file set. Please set a config file first.")
-            sys.exit(1)
-        
-        control_filter_config(args[1:])
-        sys.exit(0)
-
     # Invalid args ------------------------------------------------------------
 
     print(f"❌ Error: Invalid config path. The path should point to a .json, .yml, or .yaml file.")
     print("ℹ️ Use 'phob config --help' for usage information.")
     sys.exit(1)
 
-#==============================================================================
-# Config Mask Management
-#==============================================================================
-
-def control_mask_config(args):
-    
-    if len(args) < 1:
-        print("❌ Error: No mask command provided.")
-        print("ℹ️ Use 'phob config --help' for usage information.")
-        sys.exit(1)
-    
-    config_path = get_config_file_path()
-    
-    # Add mask ----------------------------------------------------------------
-    
-    if args[0] in ['add']:
-        if len(args) < 2:
-            print("❌ Error: No mask name provided.")
-            print("ℹ️ Usage: phob config mask add [name]")
-            sys.exit(1)
-        
-        mask_name = args[1]
-        
-        # Get current positions
-        print("⌛ Reading current mask positions...")
-        config = get_config()
-        # Use default ports (fixed via udev rules)
-        p = phobos.PupilMask()
-        
-        # Get current positions
-        # get_pos() returns (wheel_angle, zaber_vertical, zaber_horizontal)
-        wheel_pos, zab_v_pos, zab_h_pos = p.get_pos()
-        x_pos = zab_h_pos  # horizontal position in steps
-        y_pos = zab_v_pos  # vertical position in steps  
-        a_pos = wheel_pos  # wheel angle in degrees
-        
-        # Update config
-        if 'mask' not in config:
-            config['mask'] = {'slots': {}}
-        if 'slots' not in config['mask']:
-            config['mask']['slots'] = {}
-            
-        config['mask']['slots'][mask_name] = {
-            'x': x_pos,
-            'y': y_pos,
-            'a': a_pos
-        }
-        
-        # Save config
-        with open(config_path, 'w') as f:
-            yaml.safe_dump(config, f, default_flow_style=False, indent=2)
-        
-        print(f"✅ Mask '{mask_name}' added with positions: x={x_pos}, y={y_pos}, a={a_pos}°")
-        sys.exit(0)
-    
-    # Remove mask -------------------------------------------------------------
-    
-    if args[0] in ['remove']:
-        if len(args) < 2:
-            print("❌ Error: No mask name provided.")
-            print("ℹ️ Usage: phob config mask remove [name]")
-            sys.exit(1)
-        
-        mask_name = args[1]
-        config = get_config()
-        
-        if 'mask' not in config or 'slots' not in config['mask'] or mask_name not in config['mask']['slots']:
-            print(f"❌ Error: Mask '{mask_name}' not found in configuration.")
-            sys.exit(1)
-        
-        del config['mask']['slots'][mask_name]
-        
-        with open(config_path, 'w') as f:
-            yaml.safe_dump(config, f, default_flow_style=False, indent=2)
-        
-        print(f"✅ Mask '{mask_name}' removed from configuration.")
-        sys.exit(0)
-    
-    # List masks --------------------------------------------------------------
-    
-    if args[0] in ['list']:
-        config = get_config()
-        
-        if 'mask' not in config or 'slots' not in config['mask'] or not config['mask']['slots']:
-            print("📋 No masks configured.")
-            sys.exit(0)
-        
-        print("📋 Configured masks:")
-        for name, mask_config in config['mask']['slots'].items():
-            x = mask_config.get('x', 'N/A')
-            y = mask_config.get('y', 'N/A')
-            a = mask_config.get('a', 'N/A')
-            print(f"  {name}: x={x}, y={y}, a={a}°")
-        sys.exit(0)
-    
-    print("❌ Error: Invalid mask config command.")
-    print("ℹ️ Use 'phob config --help' for usage information.")
-    sys.exit(1)
-
-#==============================================================================
-# Config Filter Management
-#==============================================================================
-
-def control_filter_config(args):
-    
-    if len(args) < 1:
-        print("❌ Error: No filter command provided.")
-        print("ℹ️ Use 'phob config --help' for usage information.")
-        sys.exit(1)
-    
-    config_path = get_config_file_path()
-    
-    # Add filter --------------------------------------------------------------
-    
-    if args[0] in ['add']:
-        if len(args) < 2:
-            print("❌ Error: No filter name provided.")
-            print("ℹ️ Usage: phob config filter add [name]")
-            sys.exit(1)
-        
-        filter_name = args[1]
-        
-        # Get current position
-        print("⌛ Reading current filter position...")
-        config = get_config()
-        # Use default port (fixed via udev rules)
-        fw = phobos.FilterWheel()
-        
-        # Get current position
-        current_slot = fw.get_pos()
-        
-        # Update config
-        if 'filter' not in config:
-            config['filter'] = {'slots': {}}
-        if 'slots' not in config['filter']:
-            config['filter']['slots'] = {}
-            
-        config['filter']['slots'][filter_name] = {
-            'slot': current_slot
-        }
-        
-        # Save config
-        with open(config_path, 'w') as f:
-            yaml.safe_dump(config, f, default_flow_style=False, indent=2)
-        
-        print(f"✅ Filter '{filter_name}' added at slot {current_slot}")
-        sys.exit(0)
-    
-    # Remove filter -----------------------------------------------------------
-    
-    if args[0] in ['remove']:
-        if len(args) < 2:
-            print("❌ Error: No filter name provided.")
-            print("ℹ️ Usage: phob config filter remove [name]")
-            sys.exit(1)
-        
-        filter_name = args[1]
-        config = get_config()
-        
-        if 'filter' not in config or 'slots' not in config['filter'] or filter_name not in config['filter']['slots']:
-            print(f"❌ Error: Filter '{filter_name}' not found in configuration.")
-            sys.exit(1)
-        
-        del config['filter']['slots'][filter_name]
-        
-        with open(config_path, 'w') as f:
-            yaml.safe_dump(config, f, default_flow_style=False, indent=2)
-        
-        print(f"✅ Filter '{filter_name}' removed from configuration.")
-        sys.exit(0)
-    
-    # List filters ------------------------------------------------------------
-    
-    if args[0] in ['list']:
-        config = get_config()
-        
-        if 'filter' not in config or 'slots' not in config['filter'] or not config['filter']['slots']:
-            print("📋 No filters configured.")
-            sys.exit(0)
-        
-        print("📋 Configured filters:")
-        for name, filter_config in config['filter']['slots'].items():
-            slot = filter_config.get('slot', 'N/A')
-            print(f"  {name}: slot={slot}")
-        sys.exit(0)
-    
-    print("❌ Error: Invalid filter config command.")
-    print("ℹ️ Use 'phob config --help' for usage information.")
-    sys.exit(1)
+# Obsolete functions removed.
 
 #==============================================================================
 # Control mask wheel
