@@ -25,8 +25,10 @@ class Config:
     >>> from phobos import config
     >>> print(config.hardware.camera.semid)
     >>> config.hardware.camera.semid = 1
-    >>> config.save()
-    >>> config.export_config("backup.yml")
+    >>> config.update() # Snapshot hardware state to config
+    >>> config.save()   # Save config to file (archives old version)
+    >>> config.apply()  # Apply config to hardware
+    >>> config.import_config("history/backup.yml") # Restore backup
     """
     _instance = None
     _config_data = {}
@@ -69,6 +71,15 @@ class Config:
         ----------
         path : str
             Path to the configuration file (.yml or .yaml).
+            
+        Notes
+        -----
+        This command will:
+        1. Load data from the specified file.
+        2. Set the target configuration file to 'config/bench.yml' (main config).
+        3. Backup the current 'bench.yml'.
+        4. Overwrite 'bench.yml' with the imported data.
+        5. Apply the new configuration to the hardware.
         """
         if not os.path.exists(path):
             print(f"❌ Error: Config file not found at {path}")
