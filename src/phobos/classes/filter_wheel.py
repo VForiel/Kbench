@@ -1,28 +1,26 @@
 import time
 from .. import serial
 
-class FilterWheel():
-    def __init__(self, filter_port:str = "/dev/ttyUSBthorlabs"):
+from .utils import Singleton
+
+class FilterWheel(metaclass=Singleton):
+    def __init__(self):
         """
-        Class to control the Thorlabs filter wheel. The wheel has 6 positions:
+        Singleton Class to control the Thorlabs filter wheel. The wheel has 6 positions:
             - 1: ND?
             - 2: ND?
             - 3: ND?
             - 4: ND?
             - 5: ND?
             - 6: ND?
-
-        Parameters
-        ----------
-        filter_port : str, optional
-            Serial port for the Thorlabs filter wheel. 
-            Default is "/dev/ttyUSBthorlabs" (fixed udev rule).
-
-        Returns
-        -------
-        None.
-
+        
+        Configuration loaded from `phobos.config.hardware.filter_wheel`.
         """
+        # Lazy import
+        import phobos
+        cfg = phobos.config.hardware.filter_wheel
+        
+        filter_port = cfg.port
       
         self.session = serial.Serial(filter_port, 115200, timeout=0.1)
         

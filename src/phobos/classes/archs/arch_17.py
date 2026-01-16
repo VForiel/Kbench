@@ -1,6 +1,7 @@
-from ..photonic_chip import Arch
+from ..photonic_chip import _Arch as Arch
+from ..utils import Singleton
 
-class Arch17(Arch):
+class Arch17(Arch, metaclass=Singleton):
     def __init__(self):
         super().__init__(
             name="Passive Kernel Nuller",

@@ -4,9 +4,11 @@ import json
 import time
 from .. import bmc
 
-class DM():
+from .utils import Singleton
+
+class DM(metaclass=Singleton):
     """
-    Class to represent a deformable mirror (DM) in the optical system.
+    Singleton Class to represent a deformable mirror (DM) in the optical system.
 
     Attributes
     ----------
@@ -16,32 +18,20 @@ class DM():
         List of segments of the DM.
     """
 
-    _default_config_path = "./DM_config.json"
-    _all = []
+    _default_config_path = "./config/DM/DM_config.json"
 
-    def __init__(self, serial_number:str = "27BW007#051", config_path:str = _default_config_path, 
-                 stabilization_time:float = 0.001, injection_segments:list = None):
+    def __init__(self):
         """
-        Initialize the DM with the given serial number and configuration file.
-
-        Parameters
-        ----------
-        serial_number : str
-            Serial number of the DM.
-        config_path : str
-            Path to the configuration file.
-        stabilization_time : float
-            Time in seconds to wait for the DM to stabilize after setting the configuration.
-        injection_segments : list, optional
-            List of segment indices used for photonic chip injection (inputs [1, 2, 3, 4]).
-            Default is [138, 137, 136, 135] (0-indexed).
+        Initialize the DM using global configuration.
         """
-
-        # Ensure that the DM is not already in use
-        for dm in DM._all:
-            if dm._serial_number == serial_number:
-                raise ValueError(f"DM with serial number {serial_number} already exists.")
-        DM._all.append(self)
+        # Lazy import to avoid circular dependency
+        import phobos
+        cfg = phobos.config.hardware.dm
+        
+        serial_number = cfg.serial_number
+        config_path = cfg.config_path
+        stabilization_time = cfg.stabilization_time
+        injection_segments = cfg.injection_segments
 
         self._serial_number = serial_number
         
@@ -56,7 +46,6 @@ class DM():
         self.bmcdm.open_dm(self._serial_number)
         self._segments = [Segment(self, i) for i in range(169)]
 
-
         # Set the initial configuration of the DM
         try:
             self.load_config(config_path)
@@ -66,6 +55,7 @@ class DM():
                 segment.set_ptt(0, 0, 0)
 
         time.sleep(stabilization_time)
+
 
     # Properties ------------------------------------------------------------
 

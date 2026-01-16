@@ -1,4 +1,5 @@
-from ..photonic_chip import Arch
+from ..photonic_chip import _Arch as Arch
+from ..utils import Singleton
 import numpy as np
 import scipy.optimize
 
@@ -7,7 +8,7 @@ try:
 except ImportError:
     plt = None
 
-class Arch6(Arch):
+class Arch6(Arch, metaclass=Singleton):
     """
     Architecture 6: 4-Port MMI Active (4 shifters, 4 inputs, 4 outputs).
     
@@ -507,8 +508,6 @@ class Arch6(Arch):
     def null_calibration_gen(
         self,
         cred3_object,
-        crop_centers,
-        crop_sizes=10,
         beta: float = 0.8,
         verbose: bool = False,
         plot: bool = False,
@@ -525,10 +524,6 @@ class Arch6(Arch):
         ----------
         cred3_object : Cred3
             Camera instance.
-        crop_centers : array-like
-            Output spot centers (expected 4 spots).
-        crop_sizes : int
-            Crop window size.
         beta : float
             Decay factor for the step size.
         verbose : bool
@@ -564,7 +559,7 @@ class Arch6(Arch):
         current_phases = [ch.get_phase() for ch in self.channels]
         
         def get_metric():
-            outs = cred3_object.get_outputs(crop_centers=crop_centers, crop_sizes=crop_sizes)
+            outs = cred3_object.get_outputs()
             # Expected outs: [Bright, Null1, Null2, Null3]
             # Verify we have at least 4 outputs? 
             # Trusting user input on crop_centers for now.
@@ -1138,10 +1133,7 @@ class Arch6(Arch):
         dm,
         dm_segments_indices: tuple,
         cred3,
-        output_positions: np.ndarray,
-        output_sizes: np.ndarray= 10,
         input_indices: tuple = (0,1),
-        bright_output_index: int = 0,
     ):
         """
         Simulate and correct atmospheric piston errors using ABCD Fringe Tracking on a classical nuller.
@@ -1189,7 +1181,7 @@ class Arch6(Arch):
                 dm.segments[seg_id].set_piston(delay_nm)
             
             # 2. Measure Flux
-            outs = cred3.get_outputs(crop_centers=output_positions, crop_sizes=output_sizes)
+            outs = cred3.get_outputs()
             fluxes_open[t, :] = outs
             
             if t % 10 == 0: print(f"\rStep {t}/{n_steps}", end="")
@@ -1228,7 +1220,7 @@ class Arch6(Arch):
             phases_inj_0[t] = 0 # No correction on channel 0
             
             # 3. Measure Fluxes
-            outs = cred3.get_outputs(crop_centers=output_positions, crop_sizes=output_sizes)
+            outs = cred3.get_outputs()
             fluxes_closed[t, :] = outs
             
             # 4. ABCD Estimation
@@ -1272,7 +1264,6 @@ class Arch6(Arch):
         self,
         atmosphere_params: dict = None,
         input_indices: tuple = (0,1),
-        bright_output_index: int = 0,
     ):
         """
         Simulate fringe tracking using the analytical model (Arch6.predict_output).
@@ -1446,7 +1437,15 @@ class Arch6(Arch):
             'inj_1': array
         """
         key = tuple(sorted(input_indices))
-        bright_idx = self.abcd[key][0] if (key in self.abcd and self.abcd[key] is not None) else 0
+        bright_output_index = 0 # Default value
+
+        if bright_output_index == 0 and hasattr(self, 'abcd') and key in self.abcd and self.abcd[key] is not None:
+             bright_output_index = self.abcd[key][0]
+        else:
+             from ... import config
+             bright_output_index = config.hardware.photonic_chip.bright_output
+        
+        bright_idx = bright_output_index
 
         if plt is not None:
             # Layout:

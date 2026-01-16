@@ -1,6 +1,7 @@
-from ..photonic_chip import Arch
+from ..photonic_chip import _Arch as Arch
+from ..utils import Singleton
 
-class Arch16(Arch):
+class Arch16(Arch, metaclass=Singleton):
     def __init__(self):
         super().__init__(
             name="Kernel Nuller 2x2 Reconfig N",

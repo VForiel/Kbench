@@ -2,65 +2,57 @@ import numpy as np
 from .. import shm, SANDBOX_MODE
 
 
-class Cred3:
+from .utils import Singleton
+
+class Cred3(metaclass=Singleton):
     """
-    Class to interface with the Cred3 camera via shared memory.
+    Singleton Class to interface with the Cred3 camera via shared memory.
     
     The camera writes frames to a shared memory location that can be read
     by this class. Optionally, dark frames can be subtracted.
     
-    Parameters
-    ----------
-    img_shm_path : str, optional
-        Shared memory path for the camera frames. Default is '/dev/shm/cred1.im.shm'.
-    dark_shm_path : str, optional
-        Shared memory path for the dark frame. Default is '/dev/shm/cred3_dark.im.shm'.
-    semid : int, optional
-        Semaphore ID for frame synchronization. Default is 0.
-    use_dark : bool, optional
-        Whether to subtract dark frames. Default is True.
-    
-    Attributes
-    ----------
-    cam : shm object
-        Shared memory instance for camera frames.
-    dark : ndarray or None
-        Dark frame array, or None if use_dark is False.
-    semid : int
-        Semaphore ID for synchronization.
-    
-    Examples
-    --------
-    >>> camera = Cred3()
-    >>> img = camera.get_image()
-    >>> outputs = camera.get_outputs()
+    Configuration is loaded from `phobos.config.hardware.cred3`.
     """
     
-    def __init__(self, 
-                 img_shm_path: str = '/dev/shm/cred1.im.shm',
-                 dark_shm_path: str = '/dev/shm/cred3_dark.im.shm',
-                 semid: int = 0,
-                 use_dark: bool = True):
+    def __init__(self):
         """
-        Initialize the Cred3 camera interface.
+        Initialize the Cred3 camera interface using global configuration.
         """
         if SANDBOX_MODE:
             print("⛱️ [SANDBOX] Cred3 running in mock mode")
         
-        self.img_shm_path = img_shm_path
-        self.dark_shm_path = dark_shm_path
-        self.semid = semid
-        self.use_dark = use_dark
+        # Lazy import to avoid circular dependency
+        import phobos
+        cfg = phobos.config.hardware.cred3
+        
+        self.img_shm_path = cfg.img_shm_path
+        self.dark_shm_path = cfg.dark_shm_path
+        self.semid = cfg.semid
+        self.use_dark = cfg.use_dark
+        
+        # Normalize output_centers
+        self.output_centers = np.array(cfg.output_centers) if cfg.output_centers else None
+            
+        # Normalize output_sizes
+        if self.output_centers is not None and isinstance(cfg.output_sizes, (int, float)):
+             self.output_sizes = [cfg.output_sizes] * len(self.output_centers)
+        else:
+             self.output_sizes = cfg.output_sizes
+
+        # Normalize bulk_center
+        self.bulk_center = np.array(cfg.bulk_center) if cfg.bulk_center else None
+            
+        self.bulk_size = cfg.bulk_size
         
         # Initialize shared memory for camera
-        self.cam = shm(img_shm_path, nosem=False)
-        self.cam.catch_up_with_sem(semid)
+        self.cam = shm(self.img_shm_path, nosem=False)
+        self.cam.catch_up_with_sem(self.semid)
         
         # Initialize dark frame if needed
         self.dark_shm_obj = None
-        if use_dark:
+        if self.use_dark:
             try:
-                self.dark_shm_obj = shm(dark_shm_path)
+                self.dark_shm_obj = shm(self.dark_shm_path)
                 self.dark = self.dark_shm_obj.get_latest_data()
                 mode_prefix = "⛱️ [SANDBOX] " if SANDBOX_MODE else ""
                 print(f"{mode_prefix}Cred3 camera initialized with dark subtraction")
@@ -71,6 +63,7 @@ class Cred3:
             self.dark = None
             mode_prefix = "⛱️ [SANDBOX] " if SANDBOX_MODE else ""
             print(f"{mode_prefix}Cred3 camera initialized without dark subtraction")
+
     
     def get_image(self, subtract_dark: bool = True) -> np.ndarray:
         """
@@ -175,8 +168,8 @@ class Cred3:
         return [crop.copy() for crop in crops]
 
     def get_outputs(self,
-                   crop_centers: np.ndarray,
-                   crop_sizes=10,
+                   crop_centers: np.ndarray = None,
+                   crop_sizes = None,
                    subtract_dark: bool = True,
                    flux_mode: str = 'mean') -> np.ndarray:
         """
@@ -220,6 +213,16 @@ class Cred3:
         >>> centers = np.array([(100, 200), (300, 400)])
         >>> flux = camera.get_outputs(crop_centers=centers, crop_sizes=20)
         """
+        # Use defaults from instance if not provided
+        if crop_centers is None:
+            if self.output_centers is not None:
+                crop_centers = self.output_centers
+            else:
+                raise ValueError("crop_centers must be provided either in get_outputs or during initialization.")
+                
+        if crop_sizes is None:
+            crop_sizes = self.output_sizes
+            
         # Get the latest image
         img = self.get_image(subtract_dark=subtract_dark)
         
@@ -236,6 +239,61 @@ class Cred3:
                 raise ValueError(f"Unknown flux_mode: {flux_mode}. Use 'mean' or 'sum'.")
                 
         return flux
+
+    def get_bulk(self,
+                crop_center: np.ndarray = None,
+                crop_size: int = None,
+                subtract_dark: bool = True,
+                flux_mode: str = 'mean') -> float:
+        """
+        Get the flux of the bulk channel.
+        
+        Parameters
+        ----------
+        crop_center : ndarray, optional
+            (x, y) coordinates for crop center. If None, uses self.bulk_center.
+        crop_size : int, optional
+            Size of the crop window. If None, uses self.bulk_size.
+        subtract_dark : bool, optional
+            Whether to subtract dark frame. Default is True.
+        flux_mode : str, optional
+            'mean' or 'sum'. Default is 'mean'.
+            
+        Returns
+        -------
+        flux : float
+            Flux in the bulk region.
+        """
+        # Use defaults if not provided
+        if crop_center is None:
+            if self.bulk_center is not None:
+                crop_center = self.bulk_center
+            else:
+                raise ValueError("crop_center must be provided either in get_bulk or during initialization (bulk_center).")
+                
+        if crop_size is None:
+            crop_size = self.bulk_size
+
+        # Get the latest image
+        img = self.get_image(subtract_dark=subtract_dark)
+        
+        # Reuse crop_outputs_from_image but adapt inputs
+        # crop_outputs expects array of centers, so wrap center in list/array
+        centers = np.array([crop_center])
+        
+        crops = self.crop_outputs_from_image(img, crop_centers=centers, crop_sizes=crop_size)
+        
+        if not crops:
+            return 0.0
+            
+        crop = crops[0]
+        
+        if flux_mode == 'sum':
+            return float(np.sum(crop))
+        elif flux_mode == 'mean':
+            return float(np.mean(crop))
+        else:
+            raise ValueError(f"Unknown flux_mode: {flux_mode}")
     
     def update_dark(self, dark_shm_path: str = None):
         """

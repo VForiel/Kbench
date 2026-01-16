@@ -1,4 +1,5 @@
-from ..photonic_chip import Arch
+from ..photonic_chip import _Arch as Arch
+from ..utils import Singleton
 import numpy as np
 import scipy.optimize
 
@@ -7,7 +8,7 @@ try:
 except ImportError:
     plt = None
 
-class Arch15(Arch):
+class Arch15(Arch, metaclass=Singleton):
     """
     Architecture 15: Mega Kernel Nuller Reconfig (14 shifters, 4 inputs, 7 outputs).
     

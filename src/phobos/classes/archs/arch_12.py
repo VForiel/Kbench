@@ -1,6 +1,7 @@
-from ..photonic_chip import Arch
+from ..photonic_chip import _Arch as Arch
+from ..utils import Singleton
 
-class Arch12(Arch):
+class Arch12(Arch, metaclass=Singleton):
     def __init__(self):
         super().__init__(
             name="4x4 MMI Passive",

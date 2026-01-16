@@ -73,8 +73,50 @@ def main():
 
     # C-Red 3 camera ----------------------------------------------------------
 
+    # C-Red 3 camera ----------------------------------------------------------
+    
     if sys.argv[1] in ['cred3']:
         control_cred3(sys.argv[2:])
+        sys.exit(0)
+
+    # Setup script ------------------------------------------------------------
+
+    if sys.argv[1] in ['setup']:
+        setup_script_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'scripts', 'setup.py')
+        # Resolve to absolute path
+        setup_script_path = os.path.abspath(setup_script_path)
+        
+        if not os.path.exists(setup_script_path):
+             print(f"❌ Error: setup.py not found at {setup_script_path}")
+             sys.exit(1)
+             
+        # Execute the script
+        import subprocess
+        try:
+             subprocess.run([sys.executable, setup_script_path], check=True)
+        except subprocess.CalledProcessError as e:
+             sys.exit(e.returncode)
+        except KeyboardInterrupt:
+             sys.exit(1)
+        sys.exit(0)
+
+    # Shutdown script ---------------------------------------------------------
+
+    if sys.argv[1] in ['shutdown']:
+        shutdown_script_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'scripts', 'shutdown.py')
+        shutdown_script_path = os.path.abspath(shutdown_script_path)
+        
+        if not os.path.exists(shutdown_script_path):
+             print(f"❌ Error: shutdown.py not found at {shutdown_script_path}")
+             sys.exit(1)
+             
+        import subprocess
+        try:
+             subprocess.run([sys.executable, shutdown_script_path], check=True)
+        except subprocess.CalledProcessError as e:
+             sys.exit(e.returncode)
+        except KeyboardInterrupt:
+             sys.exit(1)
         sys.exit(0)
 
     # Invalid equipment -------------------------------------------------------
@@ -99,6 +141,8 @@ def show_help():
     print("  pointgrey  Point Grey camera utilities (reset)")
     print("  cred3    C-Red 3 camera utilities (take dark frames)")
     print("  config   Manage configuration files and settings")
+    print("  setup    Run the interactive bench setup script")
+    print("  shutdown Run the bench shutdown script")
     
     print("\n⚙️  Global Options:")
     print("  -h, --help     Show this help message and exit")
@@ -169,10 +213,13 @@ def control_config(args):
         print("       phob config create [path]")
         print("       phob config [command] [options]")
         print("       phob config [equipment] [action] [name]")
+        print("       phob config import [path]    # Set active config file")
+        print("       phob config export [path]    # Save copy of current config")
         
         print("\n📁 File Management:")
         print("  [path]         Set active configuration file (.yml/.json)")
         print("  create [path]  Create new configuration interactively")
+        print("  save           Save current configuration to file (and backup)")
         
         print("\n📋 Information:")
         print("  -s, --show     Show current configuration file path")
@@ -235,6 +282,39 @@ def control_config(args):
         else:
             print("🫤 No configuration file set.")
         sys.exit(0)
+
+    command = args[0]
+    
+    if command == 'save':
+        phobos.config.save()
+        sys.exit(0)
+
+    if command == 'export':
+        if len(args) < 2:
+            print("❌ Error: No export path provided.")
+            print("ℹ️ Usage: phob config export [path]")
+            sys.exit(1)
+        phobos.config.export_config(args[1])
+        sys.exit(0)
+
+    # Import / Set (Explicit command) -----------------------------------------
+    if command == 'import':
+        if len(args) < 2:
+            print("❌ Error: No config path provided.")
+            print("ℹ️ Usage: phob config import [path]")
+            sys.exit(1)
+        
+        path = args[1]
+        if os.path.exists(path) and (path.endswith('.json') or path.endswith('.yml') or path.endswith('.yaml')):
+             print(f"⌛ Importing configuration from {path}...")
+             CONFIG['config_path'] = os.path.abspath(path)
+             with open(CONFIG_FILE, "w") as f:
+                 json.dump(CONFIG, f, indent=4)
+             print("✅ Configuration active set to imported file.")
+             sys.exit(0)
+        else:
+             print(f"❌ Error: Invalid config file '{path}'")
+             sys.exit(1)
 
     # Create ------------------------------------------------------------------
 

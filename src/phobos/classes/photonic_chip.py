@@ -11,7 +11,9 @@ import os
 from itertools import combinations
 
 
-class XPOW:
+from .utils import Singleton
+
+class XPOW(metaclass=Singleton):
     """
     Singleton class managing the serial connection to the XPOW controller. You can simply use `phobos.xpow` to access it.
     
@@ -71,11 +73,12 @@ class XPOW:
     # Default: 2π phase shift at 0.6W → 0.6/(2π) ≈ 0.095 W/rad
     PHASE_CONVERSION = np.ones(N_CHANNELS) * (0.6 / (2 * np.pi))
     
-    def __new__(cls):
-        """Singleton pattern: return existing instance or create new one."""
-        if cls._instance is None:
-            cls._instance = super(XPOW, cls).__new__(cls)
-        return cls._instance
+    
+    def __init__(self):
+        """Initialize XPOW controller."""
+        if hasattr(self, '_initialized'): return
+        self._initialized = True
+
     
     def __getattr__(self, name):
         """Handle deprecated method calls with warnings."""
@@ -245,14 +248,16 @@ class XPOW:
         --------
         >>> XPOW.turn_off()  # Turn off all channels
         """
-        _xpow.send_command(f"CH:1-{XPOW.N_CHANNELS}:CUR:0", verbose=verbose, output=False)
-        _xpow.send_command(f"CH:1-{XPOW.N_CHANNELS}:VOLT:0", verbose=verbose, output=False)
         if verbose:
             print(f"✅ All {XPOW.N_CHANNELS} XPOW channels turned off.")
 
-# Global XPOW controller instance (singleton)
-_xpow = XPOW()
-xpow = _xpow
+    def __init__(self):
+        """Initialize XPOW controller."""
+        if hasattr(self, '_initialized'): return
+        self._initialized = True
+        self.connect()
+
+
 
 
 class PhaseShifter:
@@ -281,7 +286,17 @@ class PhaseShifter:
     >>> current = ch17.get_current()
     """
     
-    xpow = _xpow
+    _instances = {}
+    xpow = None
+
+    def __new__(cls, channel_number: int, *args, **kwargs):
+        """Multiton pattern: return existing instance for this channel or create new one."""
+        if not (1 <= channel_number <= XPOW.N_CHANNELS):
+             raise ValueError(f"❌ Invalid channel number {channel_number}. Must be between 1 and {XPOW.N_CHANNELS}.")
+             
+        if channel_number not in cls._instances:
+            cls._instances[channel_number] = super(PhaseShifter, cls).__new__(cls)
+        return cls._instances[channel_number]
 
     def __init__(self, channel_number: int, calibrate: bool = True):
         """
@@ -292,11 +307,18 @@ class PhaseShifter:
         channel_number : int
             Absolute channel number (1-40).
         """
-        if not (1 <= channel_number <= XPOW.N_CHANNELS):
-            raise ValueError(f"❌ Invalid channel number {channel_number}. Must be between 1 and {XPOW.N_CHANNELS}.")
-        self.channel = channel_number
+        # If already initialized (from cache), skip
+        if hasattr(self, 'channel'):
+            return
 
-        self.dac_calibration()
+        self.channel = channel_number
+        self.xpow = XPOW()
+        
+        # Calibration relies on XPOW connection. 
+        # Since we just created it, we might want to calibrate.
+        # But if we pull from cache, we skip this block, so we don't re-calibrate.
+        if calibrate:
+            self.dac_calibration()
         
     def set_current(self, current: float, verbose: bool = False):
         """
@@ -314,9 +336,9 @@ class PhaseShifter:
         The DAC value is computed as: current * CUR_CONVERSION * CUR_CORRECTION[channel]
         where CUR_CONVERSION is a fixed hardware constant and CUR_CORRECTION is calibrable.
         """
-        current = max(0, min(_xpow.MAX_CURRENT, current))
-        current_value = current * _xpow.CUR_CONVERSION * _xpow.CUR_CORRECTION[self.channel - 1]
-        _xpow.send_command(f"CH:{self.channel}:CUR:{int(current_value)}", verbose=verbose, output=False)
+        current = max(0, min(self.xpow.MAX_CURRENT, current))
+        current_value = current * self.xpow.CUR_CONVERSION * self.xpow.CUR_CORRECTION[self.channel - 1]
+        self.xpow.send_command(f"CH:{self.channel}:CUR:{int(current_value)}", verbose=verbose, output=False)
         
     def set_voltage(self, voltage: float, verbose: bool = False):
         """
@@ -334,9 +356,9 @@ class PhaseShifter:
         The DAC value is computed as: voltage * VOLT_CONVERSION * VOLT_CORRECTION[channel]
         where VOLT_CONVERSION is a fixed hardware constant and VOLT_CORRECTION is calibrable.
         """ 
-        voltage = max(0, min(_xpow.MAX_VOLTAGE, voltage))
-        voltage_value = voltage * _xpow.VOLT_CONVERSION * _xpow.VOLT_CORRECTION[self.channel - 1]
-        _xpow.send_command(f"CH:{self.channel}:VOLT:{int(voltage_value)}", verbose=verbose, output=False)
+        voltage = max(0, min(self.xpow.MAX_VOLTAGE, voltage))
+        voltage_value = voltage * self.xpow.VOLT_CONVERSION * self.xpow.VOLT_CORRECTION[self.channel - 1]
+        self.xpow.send_command(f"CH:{self.channel}:VOLT:{int(voltage_value)}", verbose=verbose, output=False)
         
     def get_current(self, verbose: bool = False) -> float:
         """
@@ -352,7 +374,7 @@ class PhaseShifter:
         float
             Measured current in mA.
         """
-        res = _xpow.send_command(f"CH:{self.channel}:VAL?", verbose=verbose)
+        res = self.xpow.send_command(f"CH:{self.channel}:VAL?", verbose=verbose)
         match = re.search(r'=\s*([\d\.]+)V,\s*([\d\.]+)mA', res)
         if match:
             return float(match.group(2))
@@ -373,7 +395,7 @@ class PhaseShifter:
         float
             Measured voltage in V.
         """
-        res = _xpow.send_command(f"CH:{self.channel}:VAL?", verbose=verbose)
+        res = self.xpow.send_command(f"CH:{self.channel}:VAL?", verbose=verbose)
         match = re.search(r'=\s*([\d\.]+)V,\s*([\d\.]+)mA', res)
         if match:
             return float(match.group(1))
@@ -412,7 +434,7 @@ class PhaseShifter:
         >>> ch.set_power(0.6)  # Set to 0.6 W (auto-calibrates if needed)
         """
         # Auto-calibrate if not done yet
-        if _xpow.POWER_CORRECTION[self.channel - 1] is None:
+        if self.xpow.POWER_CORRECTION[self.channel - 1] is None:
             if verbose:
                 print(f"🔧 Auto-calibrating channel {self.channel}...")
             self.dac_calibration(verbose=verbose)
@@ -423,7 +445,7 @@ class PhaseShifter:
         # Compute voltage from power using the calibrated slope
         # P = slope * V * I  =>  V = sqrt(P / (slope * I))
         # I = 0.3 A (300 mA converted to amperes)
-        slope = _xpow.POWER_CORRECTION[self.channel - 1]
+        slope = self.xpow.POWER_CORRECTION[self.channel - 1]
         voltage = np.sqrt(power / slope)
         
         # Apply voltage
@@ -503,7 +525,7 @@ class PhaseShifter:
             print(f"🔧 Calibrating channel {self.channel} using 2-point measurement...")
 
         # Reset power correction before calibration
-        _xpow.POWER_CORRECTION[self.channel - 1] = None
+        self.xpow.POWER_CORRECTION[self.channel - 1] = None
         
         # ========== BEFORE CALIBRATION SCANS ==========
         if plot:
@@ -569,7 +591,7 @@ class PhaseShifter:
             slope = (i2 - i1) / (v2 - v1)
         
         # Store the slope coefficient
-        _xpow.POWER_CORRECTION[self.channel - 1] = slope
+        self.xpow.POWER_CORRECTION[self.channel - 1] = slope
         
         if verbose:
             print(f"✅ Channel {self.channel} calibrated: slope={slope:.6f}")
@@ -800,7 +822,7 @@ class PhaseShifter:
         This coefficient can be calibrated using Arch.phase_calibration().
         """
         # Compute power needed for the desired phase
-        power = phase * _xpow.PHASE_CONVERSION[self.channel - 1]
+        power = phase * self.xpow.PHASE_CONVERSION[self.channel - 1]
         
         # Apply the power
         self.set_power(power, verbose=verbose)
@@ -828,7 +850,7 @@ class PhaseShifter:
         This assumes the power-to-phase relationship is linear.
         """
         power = self.get_power(verbose=verbose)
-        phase = power / _xpow.PHASE_CONVERSION[self.channel - 1]
+        phase = power / self.xpow.PHASE_CONVERSION[self.channel - 1]
         
         if verbose:
             print(f"📊 Channel {self.channel}: power={power:.3f} W → phase={phase:.3f} rad")
@@ -853,7 +875,7 @@ class PhaseShifter:
             return lambda plot=False, verbose=False: print(f"⚠️  update_coeff() is deprecated and does nothing.") if verbose else None
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
-class Arch:
+class _Arch:
     """
     Base class to handle a photonic chip architecture via the XPOW controller.
     
@@ -896,26 +918,11 @@ class Arch:
         Reference to the singleton XPOW controller.
     """
 
-    xpow = _xpow
+    xpow = None
 
     def __init__(self, name: str, id: str, n_inputs: int, n_outputs: int, topas: tuple, number: int = None):
         """
         Initialize a Arch instance.
-        
-        Parameters
-        ----------
-        name : str
-            Name of the architecture.
-        id : str
-            ID of the architecture.
-        n_inputs : int
-            Number of inputs.
-        n_outputs : int
-            Number of outputs.
-        topas : tuple
-            Tuple of TOPA channel numbers.
-        number : int, optional
-            Architecture number.
         """
         self.name = name
         self.id = id
@@ -924,11 +931,14 @@ class Arch:
         self.n_outputs = n_outputs
         self.topas = topas
         
+        # Get Singleton XPOW instance (triggers connection if not already connected)
+        self.xpow = XPOW()
+        
         # Create channel objects (list indexed from 0)
         self.channels = [PhaseShifter(channel_num) for channel_num in self.topas]
         
         # Ensure XPOW connection is established
-        _xpow.connect()
+        # _xpow.connect() # Lazy loading, removed eager connect
 
     def __getattr__(self, name):
         """Handle deprecated method calls with warnings."""
@@ -2026,36 +2036,36 @@ class Arch:
         print(f"✅ Plotting complete. Figures saved to: {output_dir}")
         return figures
 
-# Backward compatibility aliases
-class XPOWController(XPOW):
+class Chip:
     """
-    Deprecated: Use :class:`XPOW` instead.
+    Factory class to return the active Architecture based on configuration.
+    This acts as a proxy to the Singleton instance of the active Arch.
+    """
+    def __new__(cls):
+        return get_chip()
 
-    .. warning::
-        This class is deprecated and will be removed in a future version. Use :class:`XPOW` instead.
+def get_chip() -> _Arch:
     """
-    def __init__(self, *args, **kwargs):
-        warnings.warn("XPOWController is deprecated, use XPOW instead", DeprecationWarning, stacklevel=2)
-        super().__init__(*args, **kwargs)
-
-class Channel(PhaseShifter):
+    Factory function to return the active Architecture instance based on configuration.
+    
+    Returns
+    -------
+    ArchN
+        Singleton instance of the active architecture.
     """
-    Deprecated: Use :class:`PhaseShifter` instead.
-
-    .. warning::
-        This class is deprecated and will be removed in a future version. Use :class:`PhaseShifter` instead.
-    """
-    def __init__(self, *args, **kwargs):
-        warnings.warn("Channel is deprecated, use PhaseShifter instead", DeprecationWarning, stacklevel=2)
-        super().__init__(*args, **kwargs)
-
-class Chip(Arch):
-    """
-    Deprecated: Use :class:`Arch` instead.
-
-    .. warning::
-        This class is deprecated and will be removed in a future version. Use :class:`Arch` instead.
-    """
-    def __init__(self, *args, **kwargs):
-        warnings.warn("Chip is deprecated, use Arch instead", DeprecationWarning, stacklevel=2)
-        super().__init__(*args, **kwargs)
+    import phobos
+    import importlib
+    
+    arch_num = phobos.config.hardware.photonic_chip.arch
+    
+    # Import the specific architecture module
+    # Assumes file naming convention: phobos.classes.archs.arch_N
+    module_name = f"phobos.classes.archs.arch_{arch_num}"
+    class_name = f"Arch{arch_num}"
+    
+    try:
+        module = importlib.import_module(module_name)
+        ArchClass = getattr(module, class_name)
+        return ArchClass()
+    except (ImportError, AttributeError) as e:
+        raise ImportError(f"Could not load architecture {arch_num} ({module_name}.{class_name}): {e}")

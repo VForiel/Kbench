@@ -40,7 +40,13 @@ else:
             print("⛱️ xaosim not available - Cred3 will run in mock mode")
 
 # Import classes
-from .classes import PupilMask, FilterWheel, DM, Segment, Chip, Arch, XPOW, XPOWController, PhaseShifter, Channel, xpow, Cred3
+# Import classes
+from .classes import PupilMask, FilterWheel, DM, Segment, Chip, XPOW, PhaseShifter, Cred3, Arch6, Config
+
+# Initialize Config Singleton
+config = Config()
+
+# Import modules
 
 # Import modules
 from .modules import atmosphere
@@ -69,4 +75,4 @@ except Exception:
 from .classes import Arch6
 
 # Make bmc, serial and classes available for other modules
-__all__ = ['bmc', 'serial', 'shm', 'PupilMask', 'FilterWheel', 'DM', 'Segment', 'Chip', 'Arch', 'XPOW', 'XPOWController', 'PhaseShifter', 'Channel', 'xpow', 'Cred3', 'atmosphere', 'SANDBOX_MODE', '__version__', 'Arch6']
+__all__ = ['bmc', 'serial', 'shm', 'PupilMask', 'FilterWheel', 'DM', 'Segment', 'Chip', 'XPOW', 'PhaseShifter', 'Cred3', 'atmosphere', 'SANDBOX_MODE', '__version__', 'Arch6', 'Config', 'config']
