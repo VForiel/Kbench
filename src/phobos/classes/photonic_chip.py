@@ -248,6 +248,18 @@ class XPOW(metaclass=Singleton):
         --------
         >>> XPOW.turn_off()  # Turn off all channels
         """
+        # Get singleton instance
+        xpow = XPOW()
+        
+        if verbose:
+            print(f"🔌 Turning off all {XPOW.N_CHANNELS} XPOW channels...")
+            
+        for ch in range(1, XPOW.N_CHANNELS + 1):
+            # Send raw commands to avoid overhead or circular dependency issues
+            # Turn voltage to 0 first (safety) then current
+            xpow.send_command(f"CH:{ch}:VOLT:0", verbose=False, output=False)
+            xpow.send_command(f"CH:{ch}:CUR:0", verbose=False, output=False)
+            
         if verbose:
             print(f"✅ All {XPOW.N_CHANNELS} XPOW channels turned off.")
 
@@ -256,6 +268,57 @@ class XPOW(metaclass=Singleton):
         if hasattr(self, '_initialized'): return
         self._initialized = True
         self.connect()
+
+        # Hardware verification (requested by user)
+        # Check Channel 1 response (Assuming "Channel 0" in request meant first channel)
+        if not SANDBOX_MODE:
+            try:
+                # 1. Set 300mA, 10V
+                self.send_command("CH:1:CUR:300", verbose=False)
+                self.send_command("CH:1:VOLT:10", verbose=False)
+                
+                # 2. Check V > 5
+                res = self.send_command("CH:1:VAL?", verbose=False)
+                # Parse response explicitly
+                match = re.search(r'=\s*([\d\.]+)V', res)
+                if not match:
+                     raise ValueError(f"Invalid response format: {res}")
+                v_meas = float(match.group(1))
+                
+                if v_meas <= 5.0:
+                     raise ConnectionError(f"Voltage check failed. Expected > 5V, got {v_meas}V.")
+                     
+                # 3. Set 0V
+                self.send_command("CH:1:VOLT:0", verbose=False)
+                
+                # 4. Check V < 5
+                res = self.send_command("CH:1:VAL?", verbose=False)
+                match = re.search(r'=\s*([\d\.]+)V', res)
+                v_meas = float(match.group(1))
+                
+                if v_meas >= 5.0:
+                     raise ConnectionError(f"Voltage reset failed. Expected < 5V, got {v_meas}V.")
+                     
+                print("✅ XPOW power supply verification passed.")
+                
+            except Exception as e:
+                # Cleanup before raising
+                self.send_command("CH:1:CUR:0", verbose=False)
+                self.send_command("CH:1:VOLT:0", verbose=False)
+                
+                err_msg = (
+                    f"\n❌ XPOW Verification Failed: {e}\n"
+                    "👉 PLEASE FOLLOW THESE STEPS:\n"
+                    "   1. Turn OFF the XPOW unit.\n"
+                    "   2. Ensure the GENERATOR is turned ON.\n"
+                    "   3. Turn ON the XPOW unit.\n"
+                    "   4. RESTART the Python kernel."
+                )
+                raise ConnectionError(err_msg) from e
+            finally:
+                # Always reset to 0 current/voltage after test
+                self.send_command("CH:1:CUR:0", verbose=False)
+                self.send_command("CH:1:VOLT:0", verbose=False)
 
 
 

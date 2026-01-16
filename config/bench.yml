@@ -1,8 +1,8 @@
 hardware:
   cred3:
     bulk_center:
-    - 0
-    - 0
+    - 10
+    - 10
     bulk_size: 10
     dark_shm_path: /dev/shm/cred3_dark.im.shm
     img_shm_path: /dev/shm/cred1.im.shm
@@ -31,8 +31,8 @@ hardware:
     port: /dev/ttyUSBthorlabs
   photonic_chip:
     arch: 6
-    driver_port_match: 2341:8036
     bright_output: 0
+    driver_port_match: 2341:8036
   pupil_mask:
     newport_home: 56.15
     newport_port: /dev/ttyUSBnewport

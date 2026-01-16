@@ -82,7 +82,7 @@ def main():
     # Setup script ------------------------------------------------------------
 
     if sys.argv[1] in ['setup']:
-        setup_script_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'scripts', 'setup.py')
+        setup_script_path = os.path.join(os.path.dirname(__file__), 'setup.py')
         # Resolve to absolute path
         setup_script_path = os.path.abspath(setup_script_path)
         
@@ -103,7 +103,7 @@ def main():
     # Shutdown script ---------------------------------------------------------
 
     if sys.argv[1] in ['shutdown']:
-        shutdown_script_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'scripts', 'shutdown.py')
+        shutdown_script_path = os.path.join(os.path.dirname(__file__), 'shutdown.py')
         shutdown_script_path = os.path.abspath(shutdown_script_path)
         
         if not os.path.exists(shutdown_script_path):

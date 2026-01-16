@@ -2,9 +2,14 @@ import os
 import sys
 import time
 
-# Ensure we can import phobos from src
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
-import phobos
+# Import phobos (assuming run as module or package)
+try:
+    from .. import XPOW
+except ImportError:
+    # If run directly as script
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+    import phobos
+    from phobos import XPOW
 
 def prompt_step(message):
     input(f"👉 {message} (Press Enter to continue...)")
@@ -39,7 +44,7 @@ def main():
     print("\n⚡ MANUAL SHUTDOWN SEQUENCE")
     prompt_step("1. Switch off the Laser Source")
     prompt_step("2. Switch off the XPOW Unit")
-    prompt_step("3. Switch off the Generator (Low Voltage)")
+    prompt_step("3. Switch off the Generator")
     
     # 3. Camera Server
     print("\n🖥️  CAMERA SERVER")

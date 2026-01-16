@@ -5,7 +5,7 @@ import yaml
 import subprocess
 import shutil
 
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'bench.yml')
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'config', 'bench.yml')
 
 def recursive_review(config_data, prefix=""):
     """
@@ -48,6 +48,7 @@ def recursive_review(config_data, prefix=""):
                     config_data[key] = new_val
 
 def load_or_create_config():
+    import phobos
     default_config = {
         'hardware': {
             'dm': {
@@ -84,24 +85,39 @@ def load_or_create_config():
         }
     }
 
-    if os.path.exists(CONFIG_PATH):
+    config_exists = os.path.exists(CONFIG_PATH)
+    should_review = True
+    
+    if config_exists:
         print(f"✅ Found configuration file: {CONFIG_PATH}")
         with open(CONFIG_PATH, 'r') as f:
             config = yaml.safe_load(f)
+            
+        # Ask if user wants to review (Default: No)
+        ans = input("🧐 Review configuration? (y/N): ").strip().lower()
+        should_review = ans in ('y', 'yes', 'true', '1')
+        
     else:
         print(f"⚠️ Configuration file not found at {CONFIG_PATH}")
         print("🔧 Creating default configuration...")
         config = default_config
+        # New config -> Force review (or default Yes)
+        should_review = True
     
     # Review process
-    print("\n🧐 Reviewing Configuration:")
-    print("   Please confirm or modify each setting.")
-    recursive_review(config)
+    if should_review:
+        print("\n🧐 Reviewing Configuration:")
+        print("   Please confirm or modify each setting.")
+        recursive_review(config)
     
     # Save updated config
     os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
     with open(CONFIG_PATH, 'w') as f:
         yaml.dump(config, f, default_flow_style=False)
+    
+    # Reload config in phobos to ensure singletons picking it up see the new values
+    print("🔄 Reloading configuration...")
+    phobos.config.reload()
     
     print(f"✅ Configuration verified/saved: {CONFIG_PATH}")
     return config
@@ -117,15 +133,19 @@ def launch_camera_server():
     try:
         subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', f'{cmd}; exec bash'])
         print("✅ Camera server terminal launched.")
+        return True
     except FileNotFoundError:
         print("⚠️ 'gnome-terminal' not found. Trying 'x-terminal-emulator'...")
         try:
             subprocess.Popen(['x-terminal-emulator', '-e', f'bash -c "{cmd}; exec bash"'])
             print("✅ Camera server terminal launched.")
+            return True
         except FileNotFoundError:
              print(f"❌ Could not launch terminal automatically. Please run this manually:\n   {cmd}")
+             return False
 
 def main():
+    import phobos
     print("="*60)
     print("🧪 PHOBos Bench Setup Script")
     print("="*60)
@@ -145,12 +165,10 @@ def main():
     
     print("\n📸 Acquiring Dark Frames...")
     try:
-        cam = phobos.Cred3(
-            img_shm_path=config['hardware']['camera']['img_shm_path'],
-            dark_shm_path=config['hardware']['camera']['dark_shm_path'],
-            semid=config['hardware']['camera']['semid'],
-            use_dark=False  
-        )
+        # Instantiate Cred3 (loads from config automatically)
+        cam = phobos.Cred3()
+        # Force use_dark to False for dark acquisition
+        cam.use_dark = False
         cam.take_darks(nb_frames=100) 
         print("✅ Dark frames acquired and saved.")
     except Exception as e:
@@ -160,16 +178,20 @@ def main():
     # 2. Manual Power-Up
     print("\n⚡ MANUAL POWER-UP SEQUENCE")
     print("   Please perform the following steps:")
-    print("   1. Switch on the Generator (Low Voltage) for XPOW")
+    print("   1. Switch on the Generator for XPOW")
     print("   2. Switch on the Photonic Chip Driver (XPOW) itself")
     print("   3. Switch on the Laser Source")
     prompt_step("Confirm when ALL steps above are completed")
     
     # 3. Camera Server
     print("\n🖥️  CAMERA SERVER")
-    launch_camera_server()
+    cam_server_launched = launch_camera_server()
     
-    print("\n✅ Setup Complete! The bench should be ready.")
+    if cam_server_launched:
+        print("\n✅ Setup Complete! The bench should be ready.")
+    else:
+        print("\n⚠️  Setup partial. Some automated steps failed.")
+        print("👉 Please manually launch the camera server (see above) to finalize setup.")
 
 if __name__ == "__main__":
     import phobos

@@ -47,9 +47,10 @@ from .classes import PupilMask, FilterWheel, DM, Segment, Chip, XPOW, PhaseShift
 config = Config()
 
 # Import modules
-
-# Import modules
 from .modules import atmosphere
+
+# Import Scripts (functions)
+from .scripts import setup, shutdown
 
 # Get version from pyproject.toml
 try:
@@ -75,4 +76,4 @@ except Exception:
 from .classes import Arch6
 
 # Make bmc, serial and classes available for other modules
-__all__ = ['bmc', 'serial', 'shm', 'PupilMask', 'FilterWheel', 'DM', 'Segment', 'Chip', 'XPOW', 'PhaseShifter', 'Cred3', 'atmosphere', 'SANDBOX_MODE', '__version__', 'Arch6', 'Config', 'config']
+__all__ = ['bmc', 'serial', 'shm', 'PupilMask', 'FilterWheel', 'DM', 'Segment', 'Chip', 'XPOW', 'PhaseShifter', 'Cred3', 'atmosphere', 'SANDBOX_MODE', '__version__', 'Arch6', 'Config', 'config', 'setup', 'shutdown']
