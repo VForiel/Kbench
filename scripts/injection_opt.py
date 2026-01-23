@@ -15,6 +15,7 @@ from tqdm import tqdm
 from time import time, sleep
 import os
 import json
+from datetime import datetime
 
 def get_frame(cam, semid):
     """
@@ -181,8 +182,8 @@ def check_cropping(crop_centers, crop_size):
         plt.colorbar()
     plt.tight_layout()
    
-
 if __name__ == '__main__':
+    date_now = datetime.now()
     npts = 31
     off_tip = 0
     off_tilt = -5.47 
@@ -192,24 +193,25 @@ if __name__ == '__main__':
     mid_piston = [-1150]*4
     active_segs0 = [111, 112, 113, 114]
     active_segs0 = [135, 136, 137, 138]
-    save_path0 = '/media/photonics/SSD 128Go/data/2025-12-18/'
+    save_path0 = '/media/photonics/SSD 128Go/data/'+'%04d'%(date_now.year)+'-'+'%02d'%(date_now.month)+'-'+'%02d'%(date_now.day)+'/'
     
-    if not os.path.exists(save_path0):
-        os.mkdir(save_path0)
-    
+
     dm = kbench.DM()
     [dm.segments[seg].set_ptt(0, 0., 0.) for seg in active_segs0]
     print('All seg flat')
     
     crop_size = 7 # px window around the output
-    crop_centers = np.array([(285, 211),
-                        (317, 211),
-                        (350, 211),
-                        (382, 211)])
+    crop_centers = np.array([(354, 270),
+                        (354, 255),
+                        (354, 240),
+                        (354, 224)])
     
     # check_cropping(crop_centers, crop_size)
     # ppp
-    
+
+    if not os.path.exists(save_path0):
+        os.mkdir(save_path0)
+        
     # [dm.segments[seg].set_ptt(mid_piston[0], off_tt, off_tt) for seg in active_segs0]
     # [dm.segments[seg].set_ptt(mid_piston[0], off_tt, 0) for seg in range(106)]
     # [dm.segments[seg].set_ptt(mid_piston[0], -off_tt, 0) for seg in range(119, 169)]
@@ -332,8 +334,8 @@ if __name__ == '__main__':
                        vmax=flux.max())
             plt.colorbar()
             plt.scatter(seg_on[i,1], seg_on[i,0], c='w', marker='+', s=100)
-            plt.xlabel('Tilt')
-            plt.ylabel('Tip')
+            plt.xlabel('Tilt (mrad)')
+            plt.ylabel('Tip (mrad)')
         plt.tight_layout()
         plt.savefig(save_path + 'TT_map.png', dpi=150, format='png')
         # plt.close('all')
@@ -345,6 +347,7 @@ if __name__ == '__main__':
         print('Analysis', stop_analysis - start_analysis)
         
         with open(save_path+'log.txt', 'w') as f:
+            f.write(date_now.isoformat()+'\n')
             f.write('Grid size\t'+str(npts)+'\n')
             f.write('Avg\t'+str(avg)+'\n')
             f.write('Wait seg\t'+str(wait_seg)+'\n')
@@ -357,6 +360,7 @@ if __name__ == '__main__':
         print('Positions and widths')
         print(params[:,1:5]) # Pos and width of Gaussian
         print('')
+        np.savetxt(save_path + 'pos_and_width.txt', params[:,1:5])
                    
     [dm.segments[seg].set_ptt(0, 0., 0.) for seg in active_segs0]
     print('All Seg flat')
