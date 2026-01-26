@@ -5,18 +5,4 @@ from .photonic_chip import Chip, XPOW, PhaseShifter
 from .cred3 import Cred3
 from .config import Config
 
-__all__ = [
-    'PupilMask',
-    'FilterWheel',
-    'DM',
-    'Segment',
-    'Chip',
-    'XPOW',
-    'PhaseShifter',
-    'Cred3'
-    'Config'
-    ]
-
-from . import photonic_chip
-
-__all__ += photonic_chip.__all__
+from .photonic_chip import *

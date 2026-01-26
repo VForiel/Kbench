@@ -1,5 +1,5 @@
-from ..photonic_chip import _Arch as Arch
-from ..utils import Singleton
+from ..arch import _Arch as Arch
+from ....utils import Singleton
 
 class Arch11(Arch, metaclass=Singleton):
     def __init__(self):

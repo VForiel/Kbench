@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .. import bmc
 
-from .utils import Singleton
+from ..utils import Singleton
 
 class DM(metaclass=Singleton):
     """

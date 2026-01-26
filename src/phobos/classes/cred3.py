@@ -2,7 +2,7 @@ import numpy as np
 from .. import shm, SANDBOX_MODE
 
 
-from .utils import Singleton
+from ..utils import Singleton
 
 class Cred3(metaclass=Singleton):
     """

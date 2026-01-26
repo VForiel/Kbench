@@ -8,12 +8,19 @@ import os
 from itertools import combinations
 
 # Internal imports
-from .. import SANDBOX_MODE
-from .. import serial
-from ...config import Config
+from ... import SANDBOX_MODE
+from ... import serial
+from ..config import Config
 from .xpow import XPOW
 config = Config()
-xpow = XPOW()
+
+MAX_VOLTAGE = 30  # V
+MAX_CURRENT = 300  # mA
+
+# Conversion factors (fixed, hardware-dependent)
+# To convert user values (mA, V) to 16-bit DAC values
+CUR_CONVERSION = 65535 / MAX_CURRENT  # DAC units per mA
+VOLT_CONVERSION = 65535 / MAX_VOLTAGE  # DAC units per V
 
 class PhaseShifter:
     """
@@ -45,21 +52,13 @@ class PhaseShifter:
     
     _instances = {}
 
-    MAX_VOLTAGE = 30  # V
-    MAX_CURRENT = 300  # mA
-
-    # Conversion factors (fixed, hardware-dependent)
-    # To convert user values (mA, V) to 16-bit DAC values
-    CUR_CONVERSION = 65535 / MAX_CURRENT  # DAC units per mA
-    VOLT_CONVERSION = 65535 / MAX_VOLTAGE  # DAC units per V
-
     # Constructors ------------------------------------------------------------
 
     def __new__(cls, channel: int, *args, **kwargs):
 
         # Check if channel is valid
-        if not (1 <= channel <= xpow.N_CHANNELS):
-             raise ValueError(f"❌ Invalid channel number {channel}. Must be between 1 and {xpow.N_CHANNELS}.")
+        if not (1 <= channel <= XPOW().N_CHANNELS):
+             raise ValueError(f"❌ Invalid channel number {channel}. Must be between 1 and {XPOW().N_CHANNELS}.")
              
         # Return cached instance if it exists
         if channel not in cls._instances:
@@ -92,7 +91,7 @@ class PhaseShifter:
         """
         current = max(0, min(MAX_CURRENT, current))
         current_value = current * CUR_CONVERSION
-        xpow.send_command(f"CH:{self.channel}:CUR:{int(current_value)}", verbose=verbose, output=False)
+        XPOW().send_command(f"CH:{self.channel}:CUR:{int(current_value)}", verbose=verbose, output=False)
         time.sleep(config.photonic_chip.stabilization_time)
         
     def set_voltage(self, voltage: float, verbose: bool = False) -> None:
@@ -108,7 +107,7 @@ class PhaseShifter:
         """ 
         voltage = max(0, min(MAX_VOLTAGE, voltage))
         voltage_value = voltage * VOLT_CONVERSION
-        xpow.send_command(f"CH:{self.channel}:VOLT:{int(voltage_value)}", verbose=verbose, output=False)
+        XPOW().send_command(f"CH:{self.channel}:VOLT:{int(voltage_value)}", verbose=verbose, output=False)
         time.sleep(config.photonic_chip.stabilization_time)
     
     def set_power(self, power: float, verbose: bool = False):
@@ -180,7 +179,7 @@ class PhaseShifter:
         float
             Measured current in mA.
         """
-        res = xpow.send_command(f"CH:{self.channel}:VAL?", verbose=verbose)
+        res = XPOW().send_command(f"CH:{self.channel}:VAL?", verbose=verbose)
         match = re.search(r'=\s*([\d\.]+)V,\s*([\d\.]+)mA', res)
         if match:
             return float(match.group(2))
@@ -201,7 +200,7 @@ class PhaseShifter:
         float
             Measured voltage in V.
         """
-        res = xpow.send_command(f"CH:{self.channel}:VAL?", verbose=verbose)
+        res = XPOW().send_command(f"CH:{self.channel}:VAL?", verbose=verbose)
         match = re.search(r'=\s*([\d\.]+)V,\s*([\d\.]+)mA', res)
         if match:
             return float(match.group(1))
@@ -584,12 +583,12 @@ class PhaseShifter:
             
         Notes
         -----
-        The power is computed as: phase * PHASE_CONVERSION[channel]
-        where PHASE_CONVERSION is the phase-to-power coefficient in W/rad.
+        The power is computed as: phase * self.phase_factor
+        where self.phase_factor is the phase-to-power coefficient in W/rad.
         This coefficient can be calibrated using Arch.phase_calibration().
         """
         # Compute power needed for the desired phase
-        power = phase * self.xpow.PHASE_CONVERSION[self.channel - 1]
+        power = phase * self.phase_factor
         
         # Apply the power
         self.set_power(power, verbose=verbose)
@@ -613,11 +612,11 @@ class PhaseShifter:
             
         Notes
         -----
-        The phase is computed as: power / PHASE_CONVERSION[channel]
+        The phase is computed as: power / self.phase_factor
         This assumes the power-to-phase relationship is linear.
         """
         power = self.get_power(verbose=verbose)
-        phase = power / self.xpow.PHASE_CONVERSION[self.channel - 1]
+        phase = power / self.phase_factor
         
         if verbose:
             print(f"📊 Channel {self.channel}: power={power:.3f} W → phase={phase:.3f} rad")

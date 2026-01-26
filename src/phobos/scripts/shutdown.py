@@ -2,14 +2,7 @@ import os
 import sys
 import time
 
-# Import phobos (assuming run as module or package)
-try:
-    from .. import XPOW
-except ImportError:
-    # If run directly as script
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
-    import phobos
-    from phobos import XPOW
+from ..classes.photonic_chip.xpow import XPOW
 
 def prompt_step(message):
     input(f"👉 {message} (Press Enter to continue...)")
@@ -24,7 +17,7 @@ def main():
     
     print("🔌 Turning off Photonic Chip (XPOW)...")
     try:
-        phobos.XPOW.turn_off(verbose=True)
+        XPOW().turn_off(verbose=True)
     except Exception as e:
         print(f"❌ Error turning off XPOW: {e}")
         

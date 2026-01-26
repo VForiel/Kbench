@@ -1,3 +1,4 @@
+# External imports
 import os
 import sys
 import toml
@@ -21,16 +22,10 @@ except ImportError:
 # Serial library selection
 if SANDBOX_MODE:
     from .sandbox import serial_mock as serial
-else:
-    import serial
-
-# xaosim library selection (for Cred3 camera)
-# If in SANDBOX_MODE, use mock even if xaosim is available
-# (because we're not on the lab PC and xaosim would return garbage)
-if SANDBOX_MODE:
     from .sandbox import xaosim_mock as xaosim
     shm = xaosim.shm
 else:
+    import serial
     try:
         from xaosim.shmlib import shm
     except ImportError:
@@ -39,18 +34,14 @@ else:
         if not _SPHINX_BUILD:
             print("⛱️ xaosim not available - Cred3 will run in mock mode")
 
-# Import classes
-# Import classes
-from .classes import PupilMask, FilterWheel, DM, Segment, Chip, XPOW, PhaseShifter, Cred3, Arch6, Config
+# Shortcuts
+from .classes import *
+from .modules import *
+from .utils import *
+from .scripts import *
 
 # Initialize Config Singleton
-config = Config()
-
-# Import modules
-from .modules import atmosphere
-
-# Import Scripts (functions)
-from .scripts import setup, shutdown
+config = classes.config.Config()
 
 # Get version from pyproject.toml
 try:
@@ -71,9 +62,3 @@ try:
     __version__ += f"+{commit[:7]}"
 except Exception:
     pass
-
-
-from .classes import Arch6
-
-# Make bmc, serial and classes available for other modules
-__all__ = ['bmc', 'serial', 'shm', 'PupilMask', 'FilterWheel', 'DM', 'Segment', 'Chip', 'XPOW', 'PhaseShifter', 'Cred3', 'atmosphere', 'SANDBOX_MODE', '__version__', 'Arch6', 'Config', 'config', 'setup', 'shutdown']

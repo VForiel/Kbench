@@ -3,10 +3,10 @@ import time
 
 # Internal imports
 from .. import serial
-import .config import Config
+from .config import Config
 config = Config()
 
-from .utils import Singleton
+from ..utils import Singleton
 
 class FilterWheel(metaclass=Singleton):
     def __init__(self):

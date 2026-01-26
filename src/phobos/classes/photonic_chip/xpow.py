@@ -1,15 +1,15 @@
+# External imports
 import numpy as np
-from .. import serial
 import time
-# import matplotlib.pyplot as plt  # Lazy loaded
-# from scipy.optimize import minimize # Lazy loaded
-from .. import SANDBOX_MODE
 import re
 import warnings
 from datetime import datetime
 import os
 from itertools import combinations
 
+# Internal imports
+from ..     . import SANDBOX_MODE
+from ... import serial
 from ...utils.singleton import Singleton
 
 class XPOW(metaclass=Singleton):

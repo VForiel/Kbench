@@ -1,1 +1,0 @@
-# Sandbox module to simulate equipment in sandbox mode

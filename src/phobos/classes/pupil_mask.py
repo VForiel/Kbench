@@ -1,13 +1,15 @@
+# External imports
 import time
 import json
 import yaml
+
+# Internal imports
 from .. import serial
+from ..utils.singleton import Singleton
 
 #==============================================================================
 # Pupil Mask Class
 #==============================================================================
-
-from ..utils import Singleton
 
 class PupilMask(metaclass=Singleton):
     """

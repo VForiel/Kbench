@@ -4,8 +4,12 @@ import scipy.optimize
 import matplotlib.pyplot as plt
 
 # Internal imports
-from ..photonic_chip import _Arch as Arch
-from ..utils import Singleton
+from ..arch import _Arch as Arch
+from ...cred3 import Cred3
+from ...config import Config
+from ...deformable_mirror import DM
+from ....modules.atmosphere import get_delays
+from ....utils import Singleton
 
 class Arch6(Arch, metaclass=Singleton):
     """
@@ -14,7 +18,7 @@ class Arch6(Arch, metaclass=Singleton):
     This is a simplified 4x4 MMI architecture with:
     - 4 inputs (controlled via DM)
     - 4 outputs (all potentially used for beam combining)
-    - 4 phase shifters (TOPAs: channels 17, 18, 19, 20)
+    - 4 phase shifters (channels 17, 18, 19, 20)
     """
     
     def __init__(self):
@@ -547,29 +551,26 @@ class Arch6(Arch, metaclass=Singleton):
         >>> offsets = arch.null_calibration_gen(verbose=True, plot=True)
         >>> arch.set_phases(offsets)  # Apply calibration
         """
-        import phobos
-        from ..cred3 import Cred3
-        cred3 = Cred3()
         
         # Get bright output from config
-        bright_output = phobos.config.photonic_chip.bright_output
+        bright_output = Config().photonic_chip.bright_output
         
         # Initial step size
         ε = 1e-4 # Minimum shift step size in radians
         Δφ = np.pi / 2 # Initial step
         
-        # Arch6 has 4 channels, all participate in optimization
-        shifter_indices = range(len(self.channels))
+        # Arch6 has 4 shifters, all participate in optimization
+        shifter_indices = range(len(self.shifters))
         
         # History
         depth_history = []
         shifters_history = []
         
         # Cache current phases to avoid repeated hardware calls
-        current_phases = [ch.get_phase() for ch in self.channels]
+        current_phases = [shifter.get_phase() for shifter in self.shifters]
         
         def get_metric():
-            outs = cred3.get_outputs()
+            outs = Cred3().get_outputs()
             # Expected outs: [Bright, Null1, Null2, Null3]
             # Verify we have at least 4 outputs? 
             # Trusting user input on crop_centers for now.
@@ -591,7 +592,7 @@ class Arch6(Arch, metaclass=Singleton):
                 print(f"--- Iteration {iteration_count} --- Δφ={Δφ:.2e}")
             
             for i in shifter_indices:
-                shifter = self.channels[i]
+                shifter = self.shifters[i]
                 
                 log = ""
                 
@@ -656,7 +657,7 @@ class Arch6(Arch, metaclass=Singleton):
             axs[0].set_title("Performance of the Nuller")
             
             for i in range(shifters_hist_arr.shape[1]):
-                axs[1].plot(shifters_hist_arr[:, i], label=f"Ch {self.channels[i].channel}")
+                axs[1].plot(shifters_hist_arr[:, i], label=f"Ch {self.shifters[i].channel}")
             
             axs[1].set_xlabel("Steps")
             axs[1].set_ylabel("Phase shift (rad)")
@@ -1142,15 +1143,7 @@ class Arch6(Arch, metaclass=Singleton):
         """
         Simulate and correct atmospheric piston errors using ABCD Fringe Tracking on a classical nuller.
         """
-        from ..deformable_mirror import DM
-        from ..cred3 import Cred3
-        # Import get_delays inside method to avoid potential circular imports
-        from ...modules.atmosphere import get_delays
-        
-        # Instantiate singletons
-        dm = DM()
-        cred3 = Cred3()
-        
+               
         print("\n🔵 Starting ABCD Fringe Tracking Simulation (Hardware)")
         print("="*40)
             
@@ -1165,7 +1158,7 @@ class Arch6(Arch, metaclass=Singleton):
         for idx in unused_inputs:
             seg_id = dm_segments_indices[idx]
             # Set to OFF position
-            dm.segments[seg_id].set_ptt(-1150, 0, -5.47)
+            DM().segments[seg_id].set_ptt(-1150, 0, -5.47)
             
         active_seg_ids = [dm_segments_indices[i] for i in input_indices]
         
@@ -1188,10 +1181,10 @@ class Arch6(Arch, metaclass=Singleton):
             for i, input_idx in enumerate(input_indices):
                 delay_nm = delays[t, input_idx]
                 seg_id = active_seg_ids[i]
-                dm.segments[seg_id].set_piston(delay_nm)
+                DM().segments[seg_id].set_piston(delay_nm)
             
             # 2. Measure Flux
-            outs = cred3.get_outputs()
+            outs = Cred3().get_outputs()
             fluxes_open[t, :] = outs
             
             if t % 10 == 0: print(f"\rStep {t}/{n_steps}", end="")
@@ -1201,7 +1194,8 @@ class Arch6(Arch, metaclass=Singleton):
         print("🔒 Running Closed Loop simulation...")
         
         # Reset Phase Shifters
-        for ch in self.channels: ch.set_phase(0.0)
+        for shifter in self.shifters:
+            shifter.set_phase(0.0)
             
         gain = 0.5
         current_correction_rad = 0.0
@@ -1209,7 +1203,7 @@ class Arch6(Arch, metaclass=Singleton):
         # Resolve correct shifter for the control input (input_indices[1])
         ctrl_input_idx = input_indices[1]
         ctrl_shifter_idx = self.get_shifter_for_input(ctrl_input_idx)
-        correction_shifter = self.channels[ctrl_shifter_idx]
+        correction_shifter = self.shifters[ctrl_shifter_idx]
         print(f"Correction applied on Shifter {ctrl_shifter_idx} (Channel {correction_shifter.channel}) for Input {ctrl_input_idx}")
         
         for t in range(n_steps):
@@ -1217,7 +1211,7 @@ class Arch6(Arch, metaclass=Singleton):
             for i, input_idx in enumerate(input_indices):
                 delay_nm = delays[t, input_idx]
                 seg_id = active_seg_ids[i]
-                dm.segments[seg_id].set_piston(delay_nm)
+                DM().segments[seg_id].set_piston(delay_nm)
                 
                 # Record phases
                 phi_rad = (delay_nm * 1e-9 / wavelength) * 2 * np.pi
@@ -1230,7 +1224,7 @@ class Arch6(Arch, metaclass=Singleton):
             phases_inj_0[t] = 0 # No correction on channel 0
             
             # 3. Measure Fluxes
-            outs = cred3.get_outputs()
+            outs = Cred3().get_outputs()
             fluxes_closed[t, :] = outs
             
             # 4. ABCD Estimation

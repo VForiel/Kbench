@@ -7,11 +7,12 @@ from datetime import datetime
 import os
 from itertools import combinations
 
-from .. import SANDBOX_MODE
-from .. import serial
 from ...utils.singleton import Singleton
+from .phase_shifter import PhaseShifter
 from .xpow import XPOW
-xpow = XPOW()
+from ..deformable_mirror import DM
+from ..cred3 import Cred3
+from ..config import Config
 
 class Chip:
     """
@@ -99,29 +100,8 @@ class _Arch:
         self.n_outputs = n_outputs
         self.topas = topas
         
-        # Get Singleton XPOW instance (triggers connection if not already connected)
-        self.xpow = XPOW()
-        
         # Create channel objects (list indexed from 0)
         self.shifters = [PhaseShifter(channel_num) for channel_num in self.topas]
-
-    def __getattr__(self, name):
-        """Handle deprecated method calls with warnings."""
-        if name == 'update_coeffs':
-            warnings.warn(
-                "update_coeffs() is deprecated and no longer needed. DAC calibration is handled by dac_calibration().",
-                DeprecationWarning,
-                stacklevel=2
-            )
-            return lambda plot=False, verbose=False: print(f"⚠️  update_coeffs() is deprecated and does nothing.") if verbose else None
-        elif name == 'calibrate_phase':
-            warnings.warn(
-                "calibrate_phase() is deprecated, use phase_calibration() instead",
-                DeprecationWarning,
-                stacklevel=2
-            )
-            return self.phase_calibration
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     def __getitem__(self, topa_index: int) -> PhaseShifter:
         """
@@ -428,8 +408,6 @@ class _Arch:
         verbose : bool, optional
             If True, print calibration details. Default is False.
         """
-        from .cred3 import Cred3
-        cred3 = Cred3()
 
         
         power_range = np.linspace(0, 1, samples)
@@ -472,7 +450,7 @@ class _Arch:
                 shifter.set_power(p)
                 
                 # Get outputs
-                outs = cred3.get_outputs()
+                outs = Cred3().get_outputs()
                 fluxes.append(outs)
             
             fluxes = np.array(fluxes) # Shape (n_samples, n_outputs)
@@ -570,7 +548,7 @@ class _Arch:
                 # So Power = Phase * Coeff => T = 2pi * Coeff => Coeff = T / 2pi
                 new_coeff = avg_period / (2 * np.pi)
                 
-                _xpow.PHASE_CONVERSION[channel.channel - 1] = new_coeff
+                XPOW().PHASE_CONVERSION[channel.channel - 1] = new_coeff
                 
                 if verbose:
                     print(f"  ✅ Channel {channel.channel} calibrated: Period={avg_period:.4f} W -> Coeff={new_coeff:.4f} W/rad")
@@ -613,7 +591,7 @@ class _Arch:
                     shifter.set_phase(phase)
                     
                     # Get outputs
-                    outs = cred3.get_outputs()
+                    outs = Cred3().get_outputs()
                     fluxes_phase.append(outs)
                 
                 fluxes_phase = np.array(fluxes_phase)  # Shape (n_samples, n_outputs)
@@ -700,10 +678,6 @@ class _Arch:
           - active_inputs: which inputs were active
           - shifter_channel: which shifter was scanned
         """
-        from .deformable_mirror import DM
-        from .cred3 import Cred3
-        dm = DM()
-        cred3 = Cred3()
 
         if verbose:
             print(f"🔬 Starting full characterization of {self.name}...")
@@ -754,8 +728,8 @@ class _Arch:
                 print(f"\n📊 Scanning with {n_active} input(s) active: {active_inputs}")
             
             # Set DM: turn off all, then turn on selected inputs
-            dm.off()  # Turn off all inputs
-            dm.max(active_inputs)  # Turn on selected inputs
+            DM().off()  # Turn off all inputs
+            DM().max(active_inputs)  # Turn on selected inputs
             
             # Scan each shifter
             for shifter_idx, shifter in enumerate(self.shifters):
@@ -777,7 +751,7 @@ class _Arch:
                     # Average multiple frames
                     temp_fluxes = []
                     for _ in range(n_averages):
-                        outs = cred3.get_outputs()
+                        outs = Cred3().get_outputs()
                         temp_fluxes.append(outs)
                     
                     fluxes.append(np.mean(temp_fluxes, axis=0))
@@ -842,7 +816,7 @@ class _Arch:
         
         # Turn everything off at the end
         self.turn_off(verbose=False)
-        dm.max()  # Restore all inputs
+        DM().max()  # Restore all inputs
         
         # Save consolidated archive
         archive_file = os.path.join(base_dir, "characterization_data.npz")
@@ -851,8 +825,8 @@ class _Arch:
         save_dict = {
             # Global metadata
             'metadata_n_outputs': self.n_outputs,
-            'metadata_crop_centers': cred3.output_centers.tolist() if cred3.output_centers is not None else None,
-            'metadata_crop_sizes': cred3.output_sizes,
+            'metadata_crop_centers': Config().cred3.output_centers,
+            'metadata_crop_sizes': Config().cred3.output_sizes,
             'metadata_n_averages': n_averages,
             'metadata_timestamp': timestamp,
             'metadata_arch_name': self.name,
