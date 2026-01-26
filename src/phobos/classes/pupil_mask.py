@@ -7,7 +7,7 @@ from .. import serial
 # Pupil Mask Class
 #==============================================================================
 
-from .utils import Singleton
+from ..utils import Singleton
 
 class PupilMask(metaclass=Singleton):
     """
