@@ -27,11 +27,13 @@ dm:
   serial_number: 27BW007#051
   stabilization_time: 0.001
 filter_wheel:
+  selected_filter: 1
   port: /dev/ttyUSBthorlabs
 photonic_chip:
   arch: 6
   bright_output: 0
   driver_port_match: 2341:8036
+  stabilization_time: 0.001
 pupil_mask:
   newport_home: 56.15
   newport_port: /dev/ttyUSBnewport

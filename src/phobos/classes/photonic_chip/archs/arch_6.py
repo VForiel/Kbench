@@ -1,12 +1,11 @@
-from ..photonic_chip import _Arch as Arch
-from ..utils import Singleton
+# External imports
 import numpy as np
 import scipy.optimize
+import matplotlib.pyplot as plt
 
-try:
-    import matplotlib.pyplot as plt
-except ImportError:
-    plt = None
+# Internal imports
+from ..photonic_chip import _Arch as Arch
+from ..utils import Singleton
 
 class Arch6(Arch, metaclass=Singleton):
     """

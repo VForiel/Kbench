@@ -38,7 +38,7 @@ class XPOW(metaclass=Singleton):
 
     Access
     ------
-    The singleton instance is available as `phobos.xpow`, `Arch.xpow`, or `PhaseShifter.xpow`.
+    The singleton instance is available as `phobos.XPOW()`.
     """
     
     _instance = None
@@ -46,89 +46,16 @@ class XPOW(metaclass=Singleton):
     
     # Hardware specifications
     N_CHANNELS = 40
-
-    # Conversion factors (fixed, hardware-dependent)
-    # To convert user values (mA, V) to 16-bit DAC values
-    CUR_CONVERSION = 65535 / 300  # DAC units per mA
-    VOLT_CONVERSION = 65535 / 40  # DAC units per V
-
-    # Securities
-    MAX_VOLTAGE = 30  # V
-    MAX_CURRENT = 300  # mA
-    
-    # Correction coefficients (calibrable, initialized to 1.0)
-    # Refined by update_coeffs() to compensate for channel variations
-    CUR_CORRECTION = np.ones(N_CHANNELS)
-    VOLT_CORRECTION = np.ones(N_CHANNELS)
-    
-    # Power correction coefficients (calibrable, initialized to None)
-    # Stores the slope coefficient from P = slope * V² calibration
-    # Computed from 2-point measurement (1V and 30V at 300mA)
-    # Will be calibrated on first use of set_power() for each channel
-    POWER_CORRECTION = np.array([None] * N_CHANNELS)
-    
-    # Phase-to-power conversion coefficients (radians to W)
-    # PHASE_CONVERSION[ch] gives the power needed per radian of phase shift
-    # Default: 2π phase shift at 0.6W → 0.6/(2π) ≈ 0.095 W/rad
-    PHASE_CONVERSION = np.ones(N_CHANNELS) * (0.6 / (2 * np.pi))
     
     def __init__(self):
         """Initialize XPOW controller."""
-        if hasattr(self, '_initialized'): return
+
+        # Prevent re-initialization in singleton pattern
+        if hasattr(self, '_initialized'):
+            return
+
         self._initialized = True
         self.connect()
-
-        # Hardware verification (requested by user)
-        # Check Channel 1 response (Assuming "Channel 0" in request meant first channel)
-        if not SANDBOX_MODE:
-            try:
-                # 1. Set 300mA, 10V
-                self.send_command("CH:1:CUR:300", verbose=False)
-                self.send_command("CH:1:VOLT:10", verbose=False)
-                
-                # 2. Check V > 5
-                res = self.send_command("CH:1:VAL?", verbose=False)
-                # Parse response explicitly
-                match = re.search(r'=\s*([\d\.]+)V', res)
-                if not match:
-                     raise ValueError(f"Invalid response format: {res}")
-                v_meas = float(match.group(1))
-                
-                if v_meas <= 5.0:
-                     raise ConnectionError(f"Voltage check failed. Expected > 5V, got {v_meas}V.")
-                     
-                # 3. Set 0V
-                self.send_command("CH:1:VOLT:0", verbose=False)
-                
-                # 4. Check V < 5
-                res = self.send_command("CH:1:VAL?", verbose=False)
-                # Parse response explicitly
-                match = re.search(r'=\s*([\d\.]+)V', res)
-                v_meas = float(match.group(1))
-                
-                if v_meas >= 5.0:
-                     raise ConnectionError(f"Voltage reset failed. Expected < 5V, got {v_meas}V.")
-                     
-                print("✅ XPOW power supply verification passed.")
-                
-            except Exception as e:
-                # Cleanup before raising
-                self.send_command("CH:1:CUR:0", verbose=False)
-                self.send_command("CH:1:VOLT:0", verbose=False)
-                
-                err_msg = (
-                    f"\n❌ XPOW Verification Failed: {e}\n"
-                    "👉 PLEASE FOLLOW THESE STEPS:\n"
-                    "   1. Turn OFF the XPOW unit.\n"
-                    "   2. Ensure the GENERATOR is turned ON.\n"
-                    "   3. Turn ON the XPOW unit.\n"
-                    "   4. RESTART the Python kernel."
-                )
-                raise ConnectionError(err_msg) from e
-            finally:
-                # Always reset to 0 current/voltage after test
-                self.send_command("CH:1:CUR:0", verbose=False)
-                self.send_command("CH:1:VOLT:0", verbose=False)
 
     def __getattr__(self, name):
         """Handle deprecated method calls with warnings."""

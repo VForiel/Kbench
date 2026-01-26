@@ -1,16 +1,17 @@
+# External imports
 import numpy as np
-from .. import serial
 import time
-# import matplotlib.pyplot as plt  # Lazy loaded
-# from scipy.optimize import minimize # Lazy loaded
-from .. import SANDBOX_MODE
 import re
 import warnings
 from datetime import datetime
 import os
 from itertools import combinations
 
+from .. import SANDBOX_MODE
+from .. import serial
 from ...utils.singleton import Singleton
+from .xpow import XPOW
+xpow = XPOW()
 
 class Chip:
     """
@@ -83,13 +84,9 @@ class _Arch:
         Number of output ports.
     topas : tuple
         Absolute channel numbers for TOPAs in this architecture.
-    channels : list[PhaseShifter]
+    shifters : list[PhaseShifter]
         List of PhaseShifter instances (indexed from 0).
-    xpow : XPOW
-        Reference to the singleton XPOW controller.
     """
-
-    xpow = None
 
     def __init__(self, name: str, id: str, n_inputs: int, n_outputs: int, topas: tuple, number: int = None):
         """
@@ -106,10 +103,7 @@ class _Arch:
         self.xpow = XPOW()
         
         # Create channel objects (list indexed from 0)
-        self.channels = [PhaseShifter(channel_num) for channel_num in self.topas]
-        
-        # Ensure XPOW connection is established
-        # _xpow.connect() # Lazy loading, removed eager connect
+        self.shifters = [PhaseShifter(channel_num) for channel_num in self.topas]
 
     def __getattr__(self, name):
         """Handle deprecated method calls with warnings."""
@@ -148,9 +142,9 @@ class _Arch:
         IndexError
             If topa_index is out of range for this architecture.
         """
-        if not (1 <= topa_index <= len(self.channels)):
-            raise IndexError(f"❌ TOPA index {topa_index} not available for architecture {self.number}. Available indices: 1-{len(self.channels)}")
-        return self.channels[topa_index - 1]
+        if not (1 <= topa_index <= len(self.shifters)):
+            raise IndexError(f"❌ TOPA index {topa_index} not available for architecture {self.number}. Available indices: 1-{len(self.shifters)}")
+        return self.shifters[topa_index - 1]
     
     def set_currents(self, currents, verbose: bool = False):
         """
@@ -175,11 +169,11 @@ class _Arch:
         >>> chip.set_currents([10.0, 15.0, 20.0, 25.0])
         """
         currents = np.asarray(currents)
-        if len(currents) != len(self.channels):
-            raise ValueError(f"❌ Expected {len(self.channels)} current values, got {len(currents)}")
+        if len(currents) != len(self.shifters):
+            raise ValueError(f"❌ Expected {len(self.shifters)} current values, got {len(currents)}")
         
-        for channel, current in zip(self.channels, currents):
-            channel.set_current(current, verbose=verbose)
+        for shifter, current in zip(self.shifters, currents):
+            shifter.set_current(current, verbose=verbose)
     
     def set_voltages(self, voltages, verbose: bool = False):
         """
@@ -204,11 +198,11 @@ class _Arch:
         >>> chip.set_voltages([1.5, 2.0, 2.5, 3.0])
         """
         voltages = np.asarray(voltages)
-        if len(voltages) != len(self.channels):
-            raise ValueError(f"❌ Expected {len(self.channels)} voltage values, got {len(voltages)}")
+        if len(voltages) != len(self.shifters):
+            raise ValueError(f"❌ Expected {len(self.shifters)} voltage values, got {len(voltages)}")
         
-        for channel, voltage in zip(self.channels, voltages):
-            channel.set_voltage(voltage, verbose=verbose)
+        for shifter, voltage in zip(self.shifters, voltages):
+            shifter.set_voltage(voltage, verbose=verbose)
     
     def get_currents(self, verbose: bool = False) -> np.ndarray:
         """
@@ -230,7 +224,7 @@ class _Arch:
         >>> currents = chip.get_currents()
         >>> print(currents)  # [10.2, 15.1, 19.8, 24.9]
         """
-        return np.array([ch.get_current(verbose=verbose) for ch in self.channels])
+        return np.array([shifter.get_current(verbose=verbose) for shifter in self.shifters])
     
     def get_voltages(self, verbose: bool = False) -> np.ndarray:
         """
@@ -252,7 +246,7 @@ class _Arch:
         >>> voltages = chip.get_voltages()
         >>> print(voltages)  # [1.52, 2.01, 2.48, 2.99]
         """
-        return np.array([ch.get_voltage(verbose=verbose) for ch in self.channels])
+        return np.array([shifter.get_voltage(verbose=verbose) for shifter in self.shifters])
     
     def set_powers(self, powers, verbose: bool = False):
         """
@@ -281,11 +275,11 @@ class _Arch:
         Each channel will auto-calibrate on first use if not already calibrated.
         """
         powers = np.asarray(powers)
-        if len(powers) != len(self.channels):
-            raise ValueError(f"❌ Expected {len(self.channels)} power values, got {len(powers)}")
+        if len(powers) != len(self.shifters):
+            raise ValueError(f"❌ Expected {len(self.shifters)} power values, got {len(powers)}")
         
-        for channel, power in zip(self.channels, powers):
-            channel.set_power(power, verbose=verbose)
+        for shifter, power in zip(self.shifters, powers):
+            shifter.set_power(power, verbose=verbose)
     
     def get_powers(self, verbose: bool = False) -> np.ndarray:
         """
@@ -307,7 +301,7 @@ class _Arch:
         >>> powers = chip.get_powers()
         >>> print(powers)  # [0.31, 0.42, 0.51, 0.59]
         """
-        return np.array([ch.get_power(verbose=verbose) for ch in self.channels])
+        return np.array([shifter.get_power(verbose=verbose) for shifter in self.shifters])
     
     def turn_off(self, verbose: bool = False):
         """
@@ -320,21 +314,16 @@ class _Arch:
             
         Notes
         -----
-        This method only affects the channels used by this chip architecture.
-        To turn off all 40 XPOW channels, use XPOWController.turn_off().
+        This method only affects the shifters used by this chip architecture.
+        To turn off all 40 XPOW shifters, use XPOWController.turn_off().
         
         Examples
         --------
-        >>> chip = Chip(6)  # 4 channels: 17, 18, 19, 20
-        >>> chip.turn_off()  # Only turns off channels 17-20
+        >>> arch = Arch6()  # 4 shifters: 17, 18, 19, 20
+        >>> arch.turn_off()  # Only turns off shifters 17-20
         """
-        for channel in self.channels:
-            channel.set_current(0, verbose=verbose)
-            channel.set_voltage(0, verbose=verbose)
-        if verbose:
-            print(f"✅ Chip {self.name} turned off (channels {list(self.topas)}).")
-        if verbose:
-            print(f"✅ Chip {self.name} turned off (channels {list(self.topas)}).")
+        for shifter in self.shifters:
+            shifter.turn_off(verbose=verbose)
 
     def set_phases(self, phases, verbose: bool = False):
         """
@@ -355,15 +344,15 @@ class _Arch:
             
         Examples
         --------
-        >>> chip = Chip(6)  # 4 TOPAs
-        >>> chip.set_phases([0.0, np.pi/4, np.pi/2, np.pi])
+        >>> arch = Arch6()  # 4 TOPAs
+        >>> arch.set_phases([0.0, np.pi/4, np.pi/2, np.pi])
         """
         phases = np.asarray(phases)
-        if len(phases) != len(self.channels):
-            raise ValueError(f"❌ Expected {len(self.channels)} phase values, got {len(phases)}")
+        if len(phases) != len(self.shifters):
+            raise ValueError(f"❌ Expected {len(self.shifters)} phase values, got {len(phases)}")
         
-        for channel, phase in zip(self.channels, phases):
-            channel.set_phase(phase, verbose=verbose)
+        for shifter, phase in zip(self.shifters, phases):
+            shifter.set_phase(phase, verbose=verbose)
     
     def get_phases(self, verbose: bool = False) -> np.ndarray:
         """
@@ -381,32 +370,32 @@ class _Arch:
             
         Examples
         --------
-        >>> chip = Chip(6)
-        >>> phases = chip.get_phases()
+        >>> arch = Arch6()
+        >>> phases = arch.get_phases()
         >>> print(phases)  # [0.0, 0.785, 1.571, 3.142]
         """
-        return np.array([ch.get_phase(verbose=verbose) for ch in self.channels])
+        return np.array([shifter.get_phase(verbose=verbose) for shifter in self.shifters])
     
     def dac_calibration(self, plot: bool = False, verbose: bool = False):
         """
-        Calibrate DAC power correction coefficients for all channels in this architecture.
+        Calibrate DAC power correction coefficients for all shifters in this architecture.
         
-        This method performs 2-point power measurements on each TOPA channel to compute
-        the slope coefficients used for accurate power control. Only channels used by
-        this specific architecture are calibrated, leaving other XPOW channels unchanged.
+        This method performs 2-point power measurements on each TOPA shifter to compute
+        the slope coefficients used for accurate power control. Only shifters used by
+        this specific architecture are calibrated, leaving other XPOW shifters unchanged.
         
         Parameters
         ----------
         plot : bool, optional
-            If True, display calibration comparison plots for each channel. Default is False.
+            If True, display calibration comparison plots for each shifter. Default is False.
         verbose : bool, optional
-            If True, print calibration details for each channel. Default is False.
+            If True, print calibration details for each shifter. Default is False.
             
         Notes
         -----
-        Only calibrates TOPA channels in self.topas (the channels used by this architecture).
-        For calibrating all 40 XPOW channels, use :meth:`XPOW.dac_calibration`.
-        For a single channel, use :meth:`PhaseShifter.dac_calibration`.
+        Only calibrates TOPA shifters in self.topas (the shifters used by this architecture).
+        For calibrating all 40 XPOW shifters, use :meth:`XPOW.dac_calibration`.
+        For a single shifter, use :meth:`PhaseShifter.dac_calibration`.
         
         Examples
         --------
@@ -414,19 +403,19 @@ class _Arch:
         >>> arch.dac_calibration(verbose=True)  # Calibrate only Arch6's 4 TOPAs
         """
         if verbose:
-            print(f"🔧 Calibrating DAC for {len(self.channels)} channels in {self.name}...")
+            print(f"🔧 Calibrating DAC for {len(self.shifters)} shifters in {self.name}...")
         
-        for channel in self.channels:
-            channel.dac_calibration(plot=plot, verbose=verbose)
+        for shifter in self.shifters:
+            shifter.dac_calibration(plot=plot, verbose=verbose)
         
         if verbose:
-            print(f"✅ DAC calibration completed for {self.name} (channels {list(self.topas)}).")
+            print(f"✅ DAC calibration completed for {self.name} (shifters {list(self.topas)}).")
     
     def phase_calibration(self, samples: int, plot: bool = False, verbose: bool = False):
         """
-        Calibrate phase-to-power conversion coefficients for all channels in this chip.
+        Calibrate phase-to-power conversion coefficients for all shifters in this chip.
         
-        This method scans each channel individually from 0 to 1.2W, measures the output flux
+        This method scans each shifter individually from 0 to 1.2W, measures the output flux
         using Cred3 camera, fits a sinusoid to the response, and
         updates the PHASE_CONVERSION coefficient based on the measured period.
         
@@ -453,35 +442,34 @@ class _Arch:
             return A * np.sin(2*np.pi/B * x + C) + D * x + E
             
         if verbose:
-            print(f"🔧 Calibrating phase for {len(self.channels)} channels...")
+            print(f"🔧 Calibrating phase for {len(self.shifters)} shifters...")
             
         if plot:
-            # Calculate grid size for subplots based on number of channels
-            n_channels = len(self.channels)
-            cols = int(np.ceil(np.sqrt(n_channels)))
-            rows = int(np.ceil(n_channels / cols))
+            # Calculate grid size for subplots based on number of shifters
+            n_shifters = len(self.shifters)
+            cols = int(np.ceil(np.sqrt(n_shifters)))
+            rows = int(np.ceil(n_shifters / cols))
             import matplotlib.pyplot as plt
             fig, axs = plt.subplots(rows, cols, figsize=(4*cols, 3*rows), constrained_layout=True)
             fig.suptitle(f"Phase Calibration - {self.name}")
-            if n_channels > 1:
+            if n_shifters > 1:
                 axs = np.atleast_1d(axs).flatten()
             else:
                 axs = [axs]
 
         out_fluxes = []
-        for idx, channel in enumerate(self.channels):
+        for idx, shifter in enumerate(self.shifters):
 
-            # Turn off all channels first
+            # Turn off all shifters first
             self.turn_off(verbose=verbose)
 
             if verbose:
-                print(f"  - Scanning channel {channel.channel}...")
-                
+                print(f"  - Scanning shifter {shifter.channel}...")
             fluxes = []
             
             # Scan power
             for p in power_range:
-                channel.set_power(p)
+                shifter.set_power(p)
                 
                 # Get outputs
                 outs = cred3.get_outputs()
@@ -502,7 +490,7 @@ class _Arch:
             
             if plot:
                 ax = axs[idx]
-                ax.set_title(f"Channel {channel.channel}")
+                ax.set_title(f"Shifter {shifter.channel}")
                 ax.set_xlabel("Power (W)")
                 ax.set_ylabel("Flux")
                 ax.grid(True)
@@ -595,7 +583,7 @@ class _Arch:
             
         if plot:
             # Hide unused subplots
-            for j in range(len(self.channels), len(axs)):
+            for j in range(len(self.shifters), len(axs)):
                 axs[j].axis('off')
             
             # ========== SECOND FIGURE: PHASE SCAN (0 to 2π) ==========
@@ -606,23 +594,23 @@ class _Arch:
             
             fig2, axs2 = plt.subplots(rows, cols, figsize=(4*cols, 3*rows), constrained_layout=True)
             fig2.suptitle(f"Phase Scan Verification (0 to 2π) - {self.name}")
-            if n_channels > 1:
+            if n_shifters > 1:
                 axs2 = np.atleast_1d(axs2).flatten()
             else:
                 axs2 = [axs2]
             
-            for idx, channel in enumerate(self.channels):
-                # Turn off all channels first
+            for idx, shifter in enumerate(self.shifters):
+                # Turn off all shifters first
                 self.turn_off(verbose=False)
                 
                 if verbose:
-                    print(f"  - Scanning phase for channel {channel.channel}...")
+                    print(f"  - Scanning phase for shifter {shifter.channel}...")
                 
                 fluxes_phase = []
                 
                 # Scan phase from 0 to 2π
                 for phase in phase_range:
-                    channel.set_phase(phase)
+                    shifter.set_phase(phase)
                     
                     # Get outputs
                     outs = cred3.get_outputs()
@@ -637,7 +625,7 @@ class _Arch:
                 
                 # Plot phase scan
                 ax2 = axs2[idx]
-                ax2.set_title(f"Channel {channel.channel}")
+                ax2.set_title(f"Shifter {shifter.channel}")
                 ax2.set_xlabel("Phase (rad)")
                 ax2.set_ylabel("Flux")
                 ax2.grid(True)
@@ -657,11 +645,11 @@ class _Arch:
                 
                 ax2.legend(fontsize='small')
                 
-                # Turn off channel before next
-                channel.turn_off()
+                # Turn off shifter before next
+                shifter.turn_off()
             
             # Hide unused subplots in second figure
-            for j in range(len(self.channels), len(axs2)):
+            for j in range(len(self.shifters), len(axs2)):
                 axs2[j].axis('off')
             
             plt.show()
@@ -719,7 +707,7 @@ class _Arch:
 
         if verbose:
             print(f"🔬 Starting full characterization of {self.name}...")
-            print(f"   Inputs: {self.n_inputs}, Outputs: {self.n_outputs}, Shifters: {len(self.channels)}")
+            print(f"   Inputs: {self.n_inputs}, Outputs: {self.n_outputs}, Shifters: {len(self.shifters)}")
         
         # Create output directory
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -752,7 +740,7 @@ class _Arch:
         # 4-inputs (all)
         input_combinations.append((all_inputs, "inputs_all"))
         
-        total_scans = len(input_combinations) * len(self.channels)
+        total_scans = len(input_combinations) * len(self.shifters)
         scan_count = 0
         
         # Dictionary to store all scan data
@@ -770,12 +758,12 @@ class _Arch:
             dm.max(active_inputs)  # Turn on selected inputs
             
             # Scan each shifter
-            for shifter_idx, shifter in enumerate(self.channels):
+            for shifter_idx, shifter in enumerate(self.shifters):
                 scan_count += 1
                 
                 if verbose:
                     print(f"  [{scan_count}/{total_scans}] Shifter {shifter.channel} " +
-                          f"(TOPA {shifter_idx+1}/{len(self.channels)})")
+                          f"(TOPA {shifter_idx+1}/{len(self.shifters)})")
                 
                 # Turn off all shifters, prepare to scan this one
                 self.turn_off(verbose=False)

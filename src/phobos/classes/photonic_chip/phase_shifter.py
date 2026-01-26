@@ -1,16 +1,19 @@
+# External imports
 import numpy as np
-from .. import serial
 import time
-# import matplotlib.pyplot as plt  # Lazy loaded
-# from scipy.optimize import minimize # Lazy loaded
-from .. import SANDBOX_MODE
 import re
 import warnings
 from datetime import datetime
 import os
 from itertools import combinations
 
-from ...utils.singleton import Singleton
+# Internal imports
+from .. import SANDBOX_MODE
+from .. import serial
+from ...config import Config
+from .xpow import XPOW
+config = Config()
+xpow = XPOW()
 
 class PhaseShifter:
     """
@@ -21,15 +24,17 @@ class PhaseShifter:
     
     Parameters
     ----------
-    channel_number : int
+    channel: int
         Absolute channel number (1-40) on the XPOW controller.
         
     Attributes
     ----------
     channel : int
         The absolute channel number.
-    xpow : XPOW
-        Reference to the singleton XPOW controller.
+    power_dac_factor: float, optional
+        Digital to Analog Conversion factor for power. Auto-calibrated on first use.
+    phase_factor: float, optional
+        Power-to-phase conversion factor in W/rad. Auto-calibrated on first use.
         
     Examples
     --------
@@ -39,40 +44,42 @@ class PhaseShifter:
     """
     
     _instances = {}
-    xpow = None
 
-    def __new__(cls, channel_number: int, *args, **kwargs):
-        """Multiton pattern: return existing instance for this channel or create new one."""
-        if not (1 <= channel_number <= XPOW.N_CHANNELS):
-             raise ValueError(f"❌ Invalid channel number {channel_number}. Must be between 1 and {XPOW.N_CHANNELS}.")
+    MAX_VOLTAGE = 30  # V
+    MAX_CURRENT = 300  # mA
+
+    # Conversion factors (fixed, hardware-dependent)
+    # To convert user values (mA, V) to 16-bit DAC values
+    CUR_CONVERSION = 65535 / MAX_CURRENT  # DAC units per mA
+    VOLT_CONVERSION = 65535 / MAX_VOLTAGE  # DAC units per V
+
+    # Constructors ------------------------------------------------------------
+
+    def __new__(cls, channel: int, *args, **kwargs):
+
+        # Check if channel is valid
+        if not (1 <= channel <= xpow.N_CHANNELS):
+             raise ValueError(f"❌ Invalid channel number {channel}. Must be between 1 and {xpow.N_CHANNELS}.")
              
-        if channel_number not in cls._instances:
-            cls._instances[channel_number] = super(PhaseShifter, cls).__new__(cls)
-        return cls._instances[channel_number]
+        # Return cached instance if it exists
+        if channel not in cls._instances:
+            cls._instances[channel] = super(PhaseShifter, cls).__new__(cls)
 
-    def __init__(self, channel_number: int, calibrate: bool = True):
-        """
-        Initialize a PhaseShifter instance.
-        
-        Parameters
-        ----------
-        channel_number : int
-            Absolute channel number (1-40).
-        """
+        return cls._instances[channel]
+
+    def __init__(self, channel: int):
+
         # If already initialized (from cache), skip
         if hasattr(self, 'channel'):
             return
 
-        self.channel = channel_number
-        self.xpow = XPOW()
+        self.channel = channel
+        self.power_dac_factor = None # Digital to Analog Conversion factor (for calibration)
+        self.phase_factor = None # W/rad (initial guess: 0.6 / (2 * np.pi), can be calibrated)
+
+    # Setter methods ----------------------------------------------------------
         
-        # Calibration relies on XPOW connection. 
-        # Since we just created it, we might want to calibrate.
-        # But if we pull from cache, we skip this block, so we don't re-calibrate.
-        if calibrate:
-            self.dac_calibration()
-        
-    def set_current(self, current: float, verbose: bool = False):
+    def set_current(self, current: float, verbose: bool = False) -> None:
         """
         Set current for this channel.
         
@@ -82,17 +89,13 @@ class PhaseShifter:
             Target current in mA.
         verbose : bool, optional
             If True, print command details. Default is False.
-        
-        Notes
-        -----
-        The DAC value is computed as: current * CUR_CONVERSION * CUR_CORRECTION[channel]
-        where CUR_CONVERSION is a fixed hardware constant and CUR_CORRECTION is calibrable.
         """
-        current = max(0, min(self.xpow.MAX_CURRENT, current))
-        current_value = current * self.xpow.CUR_CONVERSION * self.xpow.CUR_CORRECTION[self.channel - 1]
-        self.xpow.send_command(f"CH:{self.channel}:CUR:{int(current_value)}", verbose=verbose, output=False)
+        current = max(0, min(MAX_CURRENT, current))
+        current_value = current * CUR_CONVERSION
+        xpow.send_command(f"CH:{self.channel}:CUR:{int(current_value)}", verbose=verbose, output=False)
+        time.sleep(config.photonic_chip.stabilization_time)
         
-    def set_voltage(self, voltage: float, verbose: bool = False):
+    def set_voltage(self, voltage: float, verbose: bool = False) -> None:
         """
         Set voltage for this channel.
         
@@ -102,57 +105,11 @@ class PhaseShifter:
             Target voltage in V.
         verbose : bool, optional
             If True, print command details. Default is False.
-        
-        Notes
-        -----
-        The DAC value is computed as: voltage * VOLT_CONVERSION * VOLT_CORRECTION[channel]
-        where VOLT_CONVERSION is a fixed hardware constant and VOLT_CORRECTION is calibrable.
         """ 
-        voltage = max(0, min(self.xpow.MAX_VOLTAGE, voltage))
-        voltage_value = voltage * self.xpow.VOLT_CONVERSION * self.xpow.VOLT_CORRECTION[self.channel - 1]
-        self.xpow.send_command(f"CH:{self.channel}:VOLT:{int(voltage_value)}", verbose=verbose, output=False)
-        
-    def get_current(self, verbose: bool = False) -> float:
-        """
-        Query measured current for this channel.
-        
-        Parameters
-        ----------
-        verbose : bool, optional
-            If True, print query details. Default is False.
-            
-        Returns
-        -------
-        float
-            Measured current in mA.
-        """
-        res = self.xpow.send_command(f"CH:{self.channel}:VAL?", verbose=verbose)
-        match = re.search(r'=\s*([\d\.]+)V,\s*([\d\.]+)mA', res)
-        if match:
-            return float(match.group(2))
-        else:
-            raise ValueError(f"❌ Unable to parse current from response: {res}")
-        
-    def get_voltage(self, verbose: bool = False) -> float:
-        """
-        Query measured voltage for this channel.
-        
-        Parameters
-        ----------
-        verbose : bool, optional
-            If True, print query details. Default is False.
-            
-        Returns
-        -------
-        float
-            Measured voltage in V.
-        """
-        res = self.xpow.send_command(f"CH:{self.channel}:VAL?", verbose=verbose)
-        match = re.search(r'=\s*([\d\.]+)V,\s*([\d\.]+)mA', res)
-        if match:
-            return float(match.group(1))
-        else:
-            raise ValueError(f"❌ Unable to parse voltage from response: {res}")
+        voltage = max(0, min(MAX_VOLTAGE, voltage))
+        voltage_value = voltage * VOLT_CONVERSION
+        xpow.send_command(f"CH:{self.channel}:VOLT:{int(voltage_value)}", verbose=verbose, output=False)
+        time.sleep(config.photonic_chip.stabilization_time)
     
     def set_power(self, power: float, verbose: bool = False):
         """
@@ -185,11 +142,12 @@ class PhaseShifter:
         >>> ch = PhaseShifter(17)
         >>> ch.set_power(0.6)  # Set to 0.6 W (auto-calibrates if needed)
         """
+        
         # Auto-calibrate if not done yet
-        if self.xpow.POWER_CORRECTION[self.channel - 1] is None:
+        if self.power_dac_factor is None:
             if verbose:
                 print(f"🔧 Auto-calibrating channel {self.channel}...")
-            self.dac_calibration(verbose=verbose)
+            self.power_dac_factor = self.power_dac_calibration(verbose=verbose)
         
         # Set fixed current at 300 mA
         self.set_current(300.0, verbose=verbose)
@@ -197,14 +155,58 @@ class PhaseShifter:
         # Compute voltage from power using the calibrated slope
         # P = slope * V * I  =>  V = sqrt(P / (slope * I))
         # I = 0.3 A (300 mA converted to amperes)
-        slope = self.xpow.POWER_CORRECTION[self.channel - 1]
-        voltage = np.sqrt(power / slope)
+        voltage = np.sqrt(power / self.power_dac_factor)
         
         # Apply voltage
         self.set_voltage(voltage, verbose=verbose)
+        time.sleep(config.photonic_chip.stabilization_time)
         
         if verbose:
             print(f"🔧 Channel {self.channel}: power={power:.3f} W → voltage={voltage:.3f} V @ 300 mA")
+
+    # Getter methods ----------------------------------------------------------
+        
+    def get_current(self, verbose: bool = False) -> float:
+        """
+        Query measured current for this channel.
+        
+        Parameters
+        ----------
+        verbose : bool, optional
+            If True, print query details. Default is False.
+            
+        Returns
+        -------
+        float
+            Measured current in mA.
+        """
+        res = xpow.send_command(f"CH:{self.channel}:VAL?", verbose=verbose)
+        match = re.search(r'=\s*([\d\.]+)V,\s*([\d\.]+)mA', res)
+        if match:
+            return float(match.group(2))
+        else:
+            raise ValueError(f"❌ Unable to parse current from response: {res}")
+        
+    def get_voltage(self, verbose: bool = False) -> float:
+        """
+        Query measured voltage for this channel.
+        
+        Parameters
+        ----------
+        verbose : bool, optional
+            If True, print query details. Default is False.
+            
+        Returns
+        -------
+        float
+            Measured voltage in V.
+        """
+        res = xpow.send_command(f"CH:{self.channel}:VAL?", verbose=verbose)
+        match = re.search(r'=\s*([\d\.]+)V,\s*([\d\.]+)mA', res)
+        if match:
+            return float(match.group(1))
+        else:
+            raise ValueError(f"❌ Unable to parse voltage from response: {res}")
     
     def get_power(self, verbose: bool = False) -> float:
         """
@@ -240,8 +242,10 @@ class PhaseShifter:
             print(f"📊 Channel {self.channel}: V={voltage:.3f} V, I={current:.1f} mA → P={power:.3f} W")
         
         return power
+
+    # Calbiration -------------------------------------------------------------
     
-    def dac_calibration(self, verbose: bool = False, plot: bool = False):
+    def power_dac_calibration(self, verbose: bool = False, plot: bool = False) -> float:
         """
         Calibrate power correction coefficient for this channel using 2-point measurement.
         
@@ -255,7 +259,12 @@ class PhaseShifter:
             If True, print calibration details. Default is False.
         plot : bool, optional
             If True, display before/after calibration comparison plots. Default is False.
-            
+
+        Returns
+        -------
+        float
+            The calibrated slope coefficient for power correction.
+
         Notes
         -----
         The calibration process:
@@ -273,13 +282,15 @@ class PhaseShifter:
         >>> ch.dac_calibration(verbose=True)
         >>> ch.set_power(0.6)  # Now uses calibrated coefficient
         """
+
         if verbose:
             print(f"🔧 Calibrating channel {self.channel} using 2-point measurement...")
 
         # Reset power correction before calibration
-        self.xpow.POWER_CORRECTION[self.channel - 1] = None
+        self.power_dac_factor = 1.0
         
         # ========== BEFORE CALIBRATION SCANS ==========
+
         if plot:
             import matplotlib.pyplot as plt
             
@@ -319,6 +330,7 @@ class PhaseShifter:
                 p_meas_p_before.append(self.get_power(verbose=False))
         
         # ========== CALIBRATION ==========
+
         # Set fixed current at 300 mA
         self.set_current(300.0, verbose=verbose)
         
@@ -343,12 +355,13 @@ class PhaseShifter:
             slope = (i2 - i1) / (v2 - v1)
         
         # Store the slope coefficient
-        self.xpow.POWER_CORRECTION[self.channel - 1] = slope
+        self.power_dac_factor = slope
         
         if verbose:
             print(f"✅ Channel {self.channel} calibrated: slope={slope:.6f}")
         
         # ========== AFTER CALIBRATION SCANS ==========
+
         if plot:
             # Current scan (after)
             self.set_voltage(1.0, verbose=verbose)
@@ -466,6 +479,8 @@ class PhaseShifter:
         
         # Turn off channel after calibration
         self.turn_off(verbose=verbose)
+
+        return slope
     
     def turn_off(self, verbose: bool = False):
         """

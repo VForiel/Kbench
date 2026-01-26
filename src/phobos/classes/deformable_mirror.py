@@ -2,6 +2,8 @@ import numpy as np
 import os
 import json
 import time
+from pathlib import Path
+
 from .. import bmc
 
 from .utils import Singleton
@@ -18,28 +20,25 @@ class DM(metaclass=Singleton):
         List of segments of the DM.
     """
 
-    _default_config_path = "./config/DM/DM_config.json"
+    from .config import Config
+    config = Config().dm
+
+
+    _default_config_path = Path(__file__).parent.parent.parent / "config" / "DM" / "DM_config.json"
     _initialized = False
 
     def __init__(self):
         """
         Initialize the DM using global configuration.
         """
+
+        # If already initialized, return existing instance
         if self._initialized:
             return
             
         self._initialized = True
-        
-        # Lazy import to avoid circular dependency
-        import phobos
-        cfg = phobos.config.dm
-        
-        serial_number = cfg.serial_number
-        config_path = cfg.config_path
-        stabilization_time = cfg.stabilization_time
-        injection_segments = cfg.injection_segments
 
-        self._serial_number = serial_number
+        self.N_SEGMENTS = 169
         
         # Set injection segments
         if injection_segments is None:
@@ -49,8 +48,8 @@ class DM(metaclass=Singleton):
 
         # Initialize the DM with the given serial number
         self.bmcdm = bmc.BmcDm()
-        self.bmcdm.open_dm(self._serial_number)
-        self._segments = [Segment(self, i) for i in range(169)]
+        self.bmcdm.open_dm(config.serial_number)
+        self.segments = [Segment(self, i) for i in range(self.N_SEGMENTS)]
 
         # Set the initial configuration of the DM
         try:
@@ -61,49 +60,6 @@ class DM(metaclass=Singleton):
                 segment.set_ptt(0, 0, 0)
 
         time.sleep(stabilization_time)
-
-
-    # Properties ------------------------------------------------------------
-
-    @property
-    def serial_number(self) -> str:
-        return self._serial_number
-    
-    @serial_number.setter
-    def serial_number(self, _):
-        raise AttributeError("Serial number is read-only and cannot be modified.")
-    
-    @property
-    def segments(self) -> list['Segment']:
-        return self._segments
-    
-    @segments.setter
-    def segments(self, _):
-        raise AttributeError("Segments are read-only and cannot be modified.")
-    
-    @property
-    def injection_segments(self) -> list:
-        """
-        Get the list of segment indices used for photonic chip injection.
-        
-        Returns
-        -------
-        list
-            List of segment indices (0-indexed).
-        """
-        return self._injection_segments
-    
-    @injection_segments.setter
-    def injection_segments(self, value):
-        """
-        Set the list of segment indices used for photonic chip injection.
-        
-        Parameters
-        ----------
-        value : list
-            List of segment indices (0-indexed).
-        """
-        self._injection_segments = list(value)
 
     #  Specific methods -------------------------------------------------------
 
@@ -329,23 +285,39 @@ class Segment():
         The tilt value of the segment in milliradians.
     """
 
-    __slots__ = ['dm', 'id', 'piston', 'tip', 'tilt']
+    __slots__ = ['id', 'piston', 'tip', 'tilt']
+
+    _instances = {}
+
+    # Constructors ------------------------------------------------------------
+
+    def __new__(cls, channel: int, *args, **kwargs):
+
+        # Check if channel is valid
+        if not (0 <= channel <= dm.N_SEGMENTS):
+             raise ValueError(f"❌ Invalid channel number {channel}. Must be between 1 and {dm.N_SEGMENTS}.")
+             
+        # Return cached instance if it exists
+        if channel not in cls._instances:
+            cls._instances[channel] = super(PhaseShifter, cls).__new__(cls)
+
+        return cls._instances[channel]
     
-    def __init__(self, dm:DM, id:int):
+    def __init__(self, id:int):
         """
         Initialize the segment with the given DM and ID.
 
         Parameters
         ----------
-        dm : DM
-            The DM to which the segment belongs.
         id : int
             The ID of the segment.
         """
 
-        self.dm = dm
-        self.id = id
+        # If already initialized (from cache), skip
+        if hasattr(self, 'channel'):
+            return
 
+        self.id = id
         self.piston = 0
         self.tip = 0
         self.tilt = 0
@@ -410,7 +382,7 @@ class Segment():
             The response of the mirror.
         """
         self.tip = value / 1000.0
-        response = self.dm.bmcdm.set_segment(self.id, self.piston, self.tip, self.tilt, True, True)
+        response = dm.bmcdm.set_segment(self.id, self.piston, self.tip, self.tilt, True, True)
         # time.sleep(0.01)  # Stabilization delay for BMC hardware
         return response
 
