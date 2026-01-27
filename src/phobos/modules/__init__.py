@@ -6,5 +6,3 @@ of the kernel-nulling optical bench.
 """
 
 from . import atmosphere
-
-__all__ = ['atmosphere']

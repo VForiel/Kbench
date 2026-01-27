@@ -6,6 +6,7 @@ toml>=0.10.2
 astropy
 scipy
 matplotlib
+gitpython
 
 # Development tools (optional but recommended)
 pytest

@@ -1,5 +1,5 @@
 # virtual environment
-.venv
+.venv*
 # Conda environments
 .conda/
 conda-bld/

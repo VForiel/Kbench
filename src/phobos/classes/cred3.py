@@ -2,65 +2,69 @@ import numpy as np
 from .. import shm, SANDBOX_MODE
 
 
-class Cred3:
+from ..utils import Singleton
+
+class Cred3(metaclass=Singleton):
     """
-    Class to interface with the Cred3 camera via shared memory.
+    Singleton Class to interface with the Cred3 camera via shared memory.
     
     The camera writes frames to a shared memory location that can be read
     by this class. Optionally, dark frames can be subtracted.
     
-    Parameters
-    ----------
-    img_shm_path : str, optional
-        Shared memory path for the camera frames. Default is '/dev/shm/cred1.im.shm'.
-    dark_shm_path : str, optional
-        Shared memory path for the dark frame. Default is '/dev/shm/cred3_dark.im.shm'.
-    semid : int, optional
-        Semaphore ID for frame synchronization. Default is 0.
-    use_dark : bool, optional
-        Whether to subtract dark frames. Default is True.
-    
-    Attributes
-    ----------
-    cam : shm object
-        Shared memory instance for camera frames.
-    dark : ndarray or None
-        Dark frame array, or None if use_dark is False.
-    semid : int
-        Semaphore ID for synchronization.
-    
-    Examples
-    --------
-    >>> camera = Cred3()
-    >>> img = camera.get_image()
-    >>> outputs = camera.get_outputs()
+    Configuration is loaded from `phobos.config.cred3`.
     """
+    _instance = None
     
-    def __init__(self, 
-                 img_shm_path: str = '/dev/shm/cred1.im.shm',
-                 dark_shm_path: str = '/dev/shm/cred3_dark.im.shm',
-                 semid: int = 0,
-                 use_dark: bool = True):
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(Cred3, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
         """
-        Initialize the Cred3 camera interface.
+        Initialize the Cred3 camera interface using global configuration.
         """
+        if self._initialized:
+            return
+            
+        self._initialized = True
+
         if SANDBOX_MODE:
             print("⛱️ [SANDBOX] Cred3 running in mock mode")
         
-        self.img_shm_path = img_shm_path
-        self.dark_shm_path = dark_shm_path
-        self.semid = semid
-        self.use_dark = use_dark
+        # Load configuration
+        import phobos
+        cfg = phobos.config.cred3
+        
+        self.img_shm_path = cfg.img_shm_path
+        self.dark_shm_path = cfg.dark_shm_path
+        self.semid = cfg.semid
+        self.use_dark = cfg.use_dark
+        
+        # Normalize output_centers
+        self.output_centers = np.array(cfg.output_centers) if cfg.output_centers else None
+            
+        # Normalize output_sizes
+        if self.output_centers is not None and isinstance(cfg.output_sizes, (int, float)):
+             self.output_sizes = [cfg.output_sizes] * len(self.output_centers)
+        else:
+             self.output_sizes = cfg.output_sizes
+
+        # Normalize bulk_center
+        self.bulk_center = np.array(cfg.bulk_center) if cfg.bulk_center else None
+            
+        self.bulk_size = cfg.bulk_size
         
         # Initialize shared memory for camera
-        self.cam = shm(img_shm_path, nosem=False)
-        self.cam.catch_up_with_sem(semid)
+        self.cam = shm(self.img_shm_path, nosem=False)
+        self.cam.catch_up_with_sem(self.semid)
         
         # Initialize dark frame if needed
         self.dark_shm_obj = None
-        if use_dark:
+        if self.use_dark:
             try:
-                self.dark_shm_obj = shm(dark_shm_path)
+                self.dark_shm_obj = shm(self.dark_shm_path)
                 self.dark = self.dark_shm_obj.get_latest_data()
                 mode_prefix = "⛱️ [SANDBOX] " if SANDBOX_MODE else ""
                 print(f"{mode_prefix}Cred3 camera initialized with dark subtraction")
@@ -71,6 +75,7 @@ class Cred3:
             self.dark = None
             mode_prefix = "⛱️ [SANDBOX] " if SANDBOX_MODE else ""
             print(f"{mode_prefix}Cred3 camera initialized without dark subtraction")
+
     
     def get_image(self, subtract_dark: bool = True) -> np.ndarray:
         """
@@ -112,12 +117,12 @@ class Cred3:
         
         return img
     
-    def crop_outputs_from_image(self, 
-                               img: np.ndarray, 
-                               crop_centers: np.ndarray, 
-                               crop_sizes=10) -> list[np.ndarray]:
+    def _crop_regions(self, 
+                     img: np.ndarray, 
+                     crop_centers: np.ndarray, 
+                     crop_sizes) -> list[np.ndarray]:
         """
-        Crop regions around specified centers from an image and return them.
+        Internal helper to crop regions from an image.
         
         Parameters
         ----------
@@ -125,17 +130,14 @@ class Cred3:
             Input image to crop from.
         crop_centers : ndarray
             Array of (x, y) coordinates for crop centers, shape (N, 2).
-        crop_sizes : int or tuple, optional
-            Size of the crop window. If int, a square window of this size
-            is used for all outputs. If tuple of length N, each output
-            gets its own crop size. Default is 10 pixels.
+        crop_sizes : int or array-like
+            Size(s) of the crop windows.
             
         Returns
         -------
         crops : list of ndarray
             List of cropped sub-images.
         """
-
         img = np.transpose(img)  # Transpose to match (x, y) indexing
         
         # Handle crop_sizes - convert to array
@@ -148,7 +150,7 @@ class Cred3:
                 raise ValueError(f"crop_sizes length ({len(crop_sizes_array)}) must match "
                                f"number of centers ({n_outputs})")
         
-        # Compute flux for each output
+        # Compute crops for each output
         crops = []
         for i in range(n_outputs):
             x_center, y_center = crop_centers[i]
@@ -162,41 +164,48 @@ class Cred3:
             y2 = int(y1 + crop_size)
             
             # Extract crop
-            # Handle boundary conditions to avoid errors if crop is outside image
             try:
                 crop = img[x1:x2, y1:y2]
                 crops.append(crop.T)
             except IndexError:
                 print(f"⚠️ Crop region {i} outside image boundaries")
-                # Append empty array or zeros matching size if possible, or None
-                # For robustness let's append a zero array of expected size
                 crops.append(np.zeros((crop_size, crop_size)))
         
         return [crop.copy() for crop in crops]
+    
+    def crop_outputs_from_image(self, img: np.ndarray) -> list[np.ndarray]:
+        """
+        Crop output regions from an image using configured centers and sizes.
+        
+        Parameters
+        ----------
+        img : ndarray
+            Input image to crop from.
+            
+        Returns
+        -------
+        crops : list of ndarray
+            List of cropped sub-images for each configured output.
+        """
+        if self.output_centers is None:
+            raise ValueError("output_centers not configured in phobos.config.cred3")
+        
+        return self._crop_regions(img, self.output_centers, self.output_sizes)
 
     def get_outputs(self,
-                   crop_centers: np.ndarray,
-                   crop_sizes=10,
                    subtract_dark: bool = True,
                    flux_mode: str = 'mean') -> np.ndarray:
         """
-        Get the flux around specified output centers.
+        Get the flux around configured output centers.
         
-        This method crops regions around specified centers and returns
-        the flux in each region. The flux can be the mean pixel value
+        This method crops regions around the output centers defined in the configuration
+        and returns the flux in each region. The flux can be the mean pixel value
         or the sum of pixel values.
         
         Parameters
         ----------
-        crop_centers : ndarray
-            Array of (x, y) coordinates for crop centers, shape (N, 2).
-        crop_sizes : int or tuple, optional
-            Size of the crop window. If int, a square window of this size
-            is used for all outputs. If tuple of length N, each output
-            gets its own crop size. Default is 10 pixels.
         subtract_dark : bool, optional
-            Whether to subtract dark frame. If None, uses initialization
-            default. Default is True.
+            Whether to subtract dark frame. Default is True.
         flux_mode : str, optional, 'mean' or 'sum'
             Method to compute the flux. 
             'mean': average of pixel values (default)
@@ -210,20 +219,23 @@ class Cred3:
         Examples
         --------
         >>> camera = Cred3()
-        >>> # Get averaged outputs with default centers
+        >>> # Get averaged outputs from configured centers
         >>> flux = camera.get_outputs()
         >>> 
         >>> # Get integrated flux (sum)
         >>> flux_sum = camera.get_outputs(flux_mode='sum')
-        >>> 
-        >>> # Custom centers and crop size
-        >>> centers = np.array([(100, 200), (300, 400)])
-        >>> flux = camera.get_outputs(crop_centers=centers, crop_sizes=20)
         """
+        # Use configured centers and sizes
+        crop_centers = self.output_centers
+        crop_sizes = self.output_sizes
+        
+        if crop_centers is None:
+            raise ValueError("output_centers not configured. Please set them in phobos.config.cred3.output_centers")
+            
         # Get the latest image
         img = self.get_image(subtract_dark=subtract_dark)
         
-        crops = self.crop_outputs_from_image(img, crop_centers=crop_centers, crop_sizes=crop_sizes)
+        crops = self.crop_outputs_from_image(img)
         
         # Compute flux
         flux = np.zeros(len(crops))
@@ -236,6 +248,50 @@ class Cred3:
                 raise ValueError(f"Unknown flux_mode: {flux_mode}. Use 'mean' or 'sum'.")
                 
         return flux
+
+    def get_bulk(self,
+                subtract_dark: bool = True,
+                flux_mode: str = 'mean') -> float:
+        """
+        Get the flux of the bulk channel using configured center and size.
+        
+        Parameters
+        ----------
+        subtract_dark : bool, optional
+            Whether to subtract dark frame. Default is True.
+        flux_mode : str, optional
+            'mean' or 'sum'. Default is 'mean'.
+            
+        Returns
+        -------
+        flux : float
+            Flux in the bulk region.
+        """
+        # Use configured bulk values
+        if self.bulk_center is None:
+            raise ValueError("bulk_center not configured in phobos.config.cred3")
+        
+        crop_center = self.bulk_center
+        crop_size = self.bulk_size
+
+        # Get the latest image
+        img = self.get_image(subtract_dark=subtract_dark)
+        
+        # Use internal helper for cropping
+        centers = np.array([crop_center])
+        crops = self._crop_regions(img, centers, crop_size)
+        
+        if not crops:
+            return 0.0
+            
+        crop = crops[0]
+        
+        if flux_mode == 'sum':
+            return float(np.sum(crop))
+        elif flux_mode == 'mean':
+            return float(np.mean(crop))
+        else:
+            raise ValueError(f"Unknown flux_mode: {flux_mode}")
     
     def update_dark(self, dark_shm_path: str = None):
         """
@@ -370,3 +426,36 @@ class Cred3:
         """
         # Shared memory objects don't need explicit closing in xaosim
         print("Cred3 camera interface closed")
+
+    def reset(self):
+        """
+        Reset the camera settings (use_dark, outputs strategies) to the configuration.
+        """
+        # Refresh configuration
+        import phobos
+        cfg = phobos.config.cred3
+        
+        self.use_dark = cfg.use_dark
+        # Re-apply dark mechanism
+        if self.use_dark:
+             if self.dark_shm_obj is None:
+                  try:
+                      self.dark_shm_obj = shm(self.dark_shm_path)
+                      self.dark = self.dark_shm_obj.get_latest_data()
+                  except Exception:
+                      pass
+        else:
+             self.dark = None
+             
+        # Restore crop settings
+        self.output_centers = np.array(cfg.output_centers) if cfg.output_centers else None
+        
+        if self.output_centers is not None and isinstance(cfg.output_sizes, (int, float)):
+             self.output_sizes = [cfg.output_sizes] * len(self.output_centers)
+        else:
+             self.output_sizes = cfg.output_sizes
+             
+        self.bulk_center = np.array(cfg.bulk_center) if cfg.bulk_center else None
+        self.bulk_size = cfg.bulk_size
+        
+        print("✅ Cred3 reset to configuration defaults.")

@@ -1,32 +1,40 @@
+# External imports
 import time
-from .. import serial
 
-class FilterWheel():
-    def __init__(self, filter_port:str = "/dev/ttyUSBthorlabs"):
+# Internal imports
+from .. import serial
+from .config import Config
+config = Config()
+
+from ..utils import Singleton
+
+class FilterWheel(metaclass=Singleton):
+    def __init__(self):
         """
-        Class to control the Thorlabs filter wheel. The wheel has 6 positions:
+        Singleton Class to control the Thorlabs filter wheel. The wheel has 6 positions:
             - 1: ND?
             - 2: ND?
             - 3: ND?
             - 4: ND?
             - 5: ND?
             - 6: ND?
-
-        Parameters
-        ----------
-        filter_port : str, optional
-            Serial port for the Thorlabs filter wheel. 
-            Default is "/dev/ttyUSBthorlabs" (fixed udev rule).
-
-        Returns
-        -------
-        None.
-
         """
-      
-        self.session = serial.Serial(filter_port, 115200, timeout=0.1)
         
-        print(f"Filter Wheel connected on port {filter_port}")
+        try:
+            # super().__init__(port) # This line is commented out as it's not in the original context
+            self.session = serial.Serial(config.filter_wheel.port, 115200, timeout=0.1) # Modified to use 'port' from config
+            print(f"Filter Wheel connected on port {config.filter_wheel.port}") # Modified to use 'port' from config
+            self._connected = True
+        except Exception as e:
+            if not os.environ.get("PHOBOS_SANDBOX"):
+                 print(f"⚠️ FilterWheel connection failed: {e}")
+            self._connected = False
+        
+    def reset(self):
+        """
+        Reset the filter wheel to the default position defined in config.
+        """
+        self.move(config.filter_wheel.selected_filter)
         
     def _purge(self):
         """
