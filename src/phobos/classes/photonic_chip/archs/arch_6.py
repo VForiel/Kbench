@@ -511,6 +511,7 @@ class Arch6(Arch, metaclass=Singleton):
     def null_calibration_gen(
         self,
         beta: float = 0.8,
+        bright_output: int = 0,
         verbose: bool = False,
         plot: bool = False,
         figsize: tuple = (10, 10),
@@ -526,6 +527,8 @@ class Arch6(Arch, metaclass=Singleton):
         ----------
         beta : float, optional
             Descent step size. Default is 0.8.
+        bright_output : int, optional
+            Index of the bright output channel. Default is 0.
         verbose : bool, optional
             Print iteration details. Default is False.
         plot : bool, optional
@@ -570,13 +573,13 @@ class Arch6(Arch, metaclass=Singleton):
         current_phases = [shifter.get_phase() for shifter in self.shifters]
         
         def get_metric():
-            outs = Cred3().get_outputs()
+            outs = np.abs(Cred3().get_outputs())
             # Expected outs: [Bright, Null1, Null2, Null3]
             # Verify we have at least 4 outputs? 
             # Trusting user input on crop_centers for now.
             
-            b = outs[0]
-            nulls_sum = np.sum(outs[1:])
+            b = outs[bright_output]
+            nulls_sum = np.sum(outs)/3 - b
             
             # Metric: Null-Depth = sum(Nulls) / Bright
             metric = nulls_sum / b if b > 0 else 0
@@ -648,11 +651,11 @@ class Arch6(Arch, metaclass=Singleton):
         if plot and plt is not None:
             shifters_hist_arr = np.array(shifters_history)
             
-            _, axs = plt.subplots(2, 1, figsize=figsize, constrained_layout=True)
+            _, axs = plt.subplots(2, 1, figsize=figsize)
             
             axs[0].plot(depth_history)
             axs[0].set_xlabel("Steps")
-            axs[0].set_ylabel("Null-Depth (ΣNulls/Bright)")
+            axs[0].set_ylabel("Mean Null-Depth")
             axs[0].set_yscale("log")
             axs[0].set_title("Performance of the Nuller")
             

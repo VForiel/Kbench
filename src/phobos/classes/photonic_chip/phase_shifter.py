@@ -19,8 +19,8 @@ MAX_CURRENT = 300  # mA
 
 # Conversion factors (fixed, hardware-dependent)
 # To convert user values (mA, V) to 16-bit DAC values
-CUR_CONVERSION = 65535 / MAX_CURRENT  # DAC units per mA
-VOLT_CONVERSION = 65535 / MAX_VOLTAGE  # DAC units per V
+CUR_CONVERSION = 65535 / 300  # DAC units per mA
+VOLT_CONVERSION = 65535 / 40  # DAC units per V
 
 class PhaseShifter:
     """
@@ -163,6 +163,45 @@ class PhaseShifter:
         if verbose:
             print(f"🔧 Channel {self.channel}: power={power:.3f} W → voltage={voltage:.3f} V @ 300 mA")
 
+    def set_phase(self, phase: float, verbose: bool = False):
+        """
+        Set phase shift for this channel by varying power.
+        
+        The phase is assumed to be a linear function of the injected power.
+        
+        Parameters
+        ----------
+        phase : float
+            Target phase shift in radians.
+        verbose : bool, optional
+            If True, print command details. Default is False.
+            
+        Notes
+        -----
+        The power is computed as: phase * self.phase_factor
+        where self.phase_factor is the phase-to-power coefficient in W/rad.
+        This coefficient can be calibrated using Arch.phase_calibration().
+        """
+        # Compute power needed for the desired phase
+
+        phase_factor = self.phase_factor
+        if phase_factor is None:
+            warnings.warn(
+                f"Phase factor not set for channel {self.channel}. Using default phase_factor=1.0. "
+                "Please calibrate using Arch.phase_calibration().",
+                UserWarning,
+                stacklevel=2
+            )
+            phase_factor = 1.0  # Default guess if not calibrated
+
+        power = phase * phase_factor
+
+        # Apply the power
+        self.set_power(power, verbose=verbose)
+        
+        if verbose:
+            print(f"🔧 Channel {self.channel}: phase={phase:.3f} rad → power={power:.3f} W")
+
     # Getter methods ----------------------------------------------------------
         
     def get_current(self, verbose: bool = False) -> float:
@@ -241,6 +280,44 @@ class PhaseShifter:
             print(f"📊 Channel {self.channel}: V={voltage:.3f} V, I={current:.1f} mA → P={power:.3f} W")
         
         return power
+    
+    def get_phase(self, verbose: bool = False) -> float:
+        """
+        Query the current phase shift based on set power.
+        
+        Parameters
+        ----------
+        verbose : bool, optional
+            If True, print query details. Default is False.
+            
+        Returns
+        -------
+        float
+            Estimated phase shift in radians, computed from measured power.
+            
+        Notes
+        -----
+        The phase is computed as: power / self.phase_factor
+        This assumes the power-to-phase relationship is linear.
+        """
+        power = self.get_power(verbose=verbose)
+
+        phase_factor = self.phase_factor
+        if phase_factor is None:
+            warnings.warn(
+                f"Phase factor not set for channel {self.channel}. Using default phase_factor=1.0. "
+                "Please calibrate using Arch.phase_calibration().",
+                UserWarning,
+                stacklevel=2
+            )
+            phase_factor = 1.0  # Default guess if not calibrated
+
+        phase = power / phase_factor
+
+        if verbose:
+            print(f"📊 Channel {self.channel}: power={power:.3f} W → phase={phase:.3f} rad")
+        
+        return phase
 
     # Calbiration -------------------------------------------------------------
     
@@ -296,15 +373,15 @@ class PhaseShifter:
             # Current scan (before)
             self.set_voltage(1.0, verbose=verbose)
             i_ramp = np.linspace(0, 30, 20)  # mA
-            i_meas_before = []
-            v_meas_before = []
-            p_meas_before = []
+            i_meas_i_before = []
+            v_meas_i_before = []
+            p_meas_i_before = []
             for i in i_ramp:
                 self.set_current(i, verbose=False)
-                i_meas_before.append(self.get_current(verbose=False))
-                v_meas_before.append(self.get_voltage(verbose=False))
-                p_meas_before.append(self.get_power(verbose=False))
-            
+                i_meas_i_before.append(self.get_current(verbose=False))
+                v_meas_i_before.append(self.get_voltage(verbose=False))
+                p_meas_i_before.append(self.get_power(verbose=False))
+
             # Voltage scan (before)
             self.set_current(300.0, verbose=verbose)
             v_ramp = np.linspace(0, 30, 20)  # V
@@ -364,14 +441,14 @@ class PhaseShifter:
         if plot:
             # Current scan (after)
             self.set_voltage(1.0, verbose=verbose)
-            i_meas_after = []
-            v_meas_after = []
-            p_meas_after = []
+            i_meas_i_after = []
+            v_meas_i_after = []
+            p_meas_i_after = []
             for i in i_ramp:
                 self.set_current(i, verbose=False)
-                i_meas_after.append(self.get_current(verbose=False))
-                v_meas_after.append(self.get_voltage(verbose=False))
-                p_meas_after.append(self.get_power(verbose=False))
+                i_meas_i_after.append(self.get_current(verbose=False))
+                v_meas_i_after.append(self.get_voltage(verbose=False))
+                p_meas_i_after.append(self.get_power(verbose=False))
             
             # Voltage scan (after)
             self.set_current(300.0, verbose=verbose)
@@ -398,24 +475,24 @@ class PhaseShifter:
             fig, axs = plt.subplots(3, 3, figsize=(15, 12))
             
             # Row 0: Current scan
-            axs[0, 0].plot(i_ramp, i_meas_before, 'o-', label='Before', alpha=0.7)
-            axs[0, 0].plot(i_ramp, i_meas_after, 's-', label='After', alpha=0.7)
+            axs[0, 0].plot(i_ramp, i_meas_i_before, 'o-', label='Before', alpha=0.7)
+            axs[0, 0].plot(i_ramp, i_meas_i_after, 's-', label='After', alpha=0.7)
             axs[0, 0].set_xlabel('Set Current (mA)')
             axs[0, 0].set_ylabel('Measured Current (mA)')
             axs[0, 0].set_title('Current Scan - Current')
             axs[0, 0].grid(True)
             axs[0, 0].legend()
             
-            axs[0, 1].plot(i_ramp, v_meas_before, 'o-', label='Before', alpha=0.7)
-            axs[0, 1].plot(i_ramp, v_meas_after, 's-', label='After', alpha=0.7)
+            axs[0, 1].plot(i_ramp, v_meas_i_before, 'o-', label='Before', alpha=0.7)
+            axs[0, 1].plot(i_ramp, v_meas_i_after, 's-', label='After', alpha=0.7)
             axs[0, 1].set_xlabel('Set Current (mA)')
             axs[0, 1].set_ylabel('Measured Voltage (V)')
             axs[0, 1].set_title('Current Scan - Voltage')
             axs[0, 1].grid(True)
             axs[0, 1].legend()
             
-            axs[0, 2].plot(i_ramp, p_meas_before, 'o-', label='Before', alpha=0.7)
-            axs[0, 2].plot(i_ramp, p_meas_after, 's-', label='After', alpha=0.7)
+            axs[0, 2].plot(i_ramp, p_meas_i_before, 'o-', label='Before', alpha=0.7)
+            axs[0, 2].plot(i_ramp, p_meas_i_after, 's-', label='After', alpha=0.7)
             axs[0, 2].set_xlabel('Set Current (mA)')
             axs[0, 2].set_ylabel('Measured Power (W)')
             axs[0, 2].set_title('Current Scan - Power')
@@ -499,144 +576,3 @@ class PhaseShifter:
         self.set_voltage(0, verbose=verbose)
         if verbose:
             print(f"✅ Channel {self.channel} turned off.")
-        
-    def ensure_current(self, current: float, tolerance: float = 0.1, max_attempts: int = 100, verbose: bool = False):
-        """
-        Iteratively adjust current until target is reached.
-        
-        Parameters
-        ----------
-        current : float
-            Target current in mA.
-        tolerance : float, optional
-            Acceptable error in mA. Default is 0.1 mA.
-        max_attempts : int, optional
-            Maximum adjustment iterations. Default is 100.
-        verbose : bool, optional
-            If True, print adjustment details. Default is False.
-            
-        Returns
-        -------
-        float
-            Correction factor applied.
-        """
-        attempts = 0
-        step_current = current
-        while attempts < max_attempts:
-            measured_current = self.get_current(verbose=verbose)
-            error = current - measured_current
-            if abs(error) <= tolerance:
-                return step_current / current
-            step = 0.5 * error
-            step_current = measured_current + step
-            self.set_current(step_current, verbose=verbose)
-            attempts += 1
-        if abs(error) > tolerance:
-            raise RuntimeError(f"❌ Unable to reach target current {current} mA on channel {self.channel} within {tolerance} mA after {max_attempts} attempts.")
-        
-    def ensure_voltage(self, voltage: float, tolerance: float = 0.01, max_attempts: int = 100, verbose: bool = False):
-        """
-        Iteratively adjust voltage until target is reached.
-        
-        Parameters
-        ----------
-        voltage : float
-            Target voltage in V.
-        tolerance : float, optional
-            Acceptable error in V. Default is 0.01 V.
-        max_attempts : int, optional
-            Maximum adjustment iterations. Default is 100.
-        verbose : bool, optional
-            If True, print adjustment details. Default is False.
-            
-        Returns
-        -------
-        float
-            Correction factor applied.
-        """
-        attempts = 0
-        step_voltage = voltage
-        while attempts < max_attempts:
-            measured_voltage = self.get_voltage(verbose=verbose)
-            error = voltage - measured_voltage
-            if abs(error) <= tolerance:
-                return step_voltage / voltage
-            step = 0.5 * error
-            step_voltage = measured_voltage + step
-            self.set_voltage(step_voltage, verbose=verbose)
-            attempts += 1
-        if abs(error) > tolerance:
-            raise RuntimeError(f"❌ Unable to reach target voltage {voltage} V on channel {self.channel} within {tolerance} V after {max_attempts} attempts.")
-    
-    def set_phase(self, phase: float, verbose: bool = False):
-        """
-        Set phase shift for this channel by varying power.
-        
-        The phase is assumed to be a linear function of the injected power.
-        
-        Parameters
-        ----------
-        phase : float
-            Target phase shift in radians.
-        verbose : bool, optional
-            If True, print command details. Default is False.
-            
-        Notes
-        -----
-        The power is computed as: phase * self.phase_factor
-        where self.phase_factor is the phase-to-power coefficient in W/rad.
-        This coefficient can be calibrated using Arch.phase_calibration().
-        """
-        # Compute power needed for the desired phase
-        power = phase * self.phase_factor
-        
-        # Apply the power
-        self.set_power(power, verbose=verbose)
-        
-        if verbose:
-            print(f"🔧 Channel {self.channel}: phase={phase:.3f} rad → power={power:.3f} W")
-    
-    def get_phase(self, verbose: bool = False) -> float:
-        """
-        Query the current phase shift based on set power.
-        
-        Parameters
-        ----------
-        verbose : bool, optional
-            If True, print query details. Default is False.
-            
-        Returns
-        -------
-        float
-            Estimated phase shift in radians, computed from measured power.
-            
-        Notes
-        -----
-        The phase is computed as: power / self.phase_factor
-        This assumes the power-to-phase relationship is linear.
-        """
-        power = self.get_power(verbose=verbose)
-        phase = power / self.phase_factor
-        
-        if verbose:
-            print(f"📊 Channel {self.channel}: power={power:.3f} W → phase={phase:.3f} rad")
-        
-        return phase
-    
-    def __getattr__(self, name):
-        """Handle deprecated method calls with warnings."""
-        if name == 'calibrate':
-            warnings.warn(
-                "calibrate() is deprecated, use dac_calibration() instead",
-                DeprecationWarning,
-                stacklevel=2
-            )
-            return self.dac_calibration
-        elif name == 'update_coeff':
-            warnings.warn(
-                "update_coeff() is deprecated and no longer needed. DAC calibration is handled by dac_calibration().",
-                DeprecationWarning,
-                stacklevel=2
-            )
-            return lambda plot=False, verbose=False: print(f"⚠️  update_coeff() is deprecated and does nothing.") if verbose else None
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")

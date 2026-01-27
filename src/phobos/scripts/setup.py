@@ -141,6 +141,11 @@ def launch_camera_server():
         subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', f'{cmd}; exec bash'])
         print("✅ Camera server terminal launched.")
         return True
+        try:
+            subprocess.Popen(['shmview','&'])
+            print("✅ shmview launched.")
+        except FileNotFoundError:
+            print("⚠️ 'shmview' not found. Please ensure it's installed to monitor shared memory images.")
     except FileNotFoundError:
         print("⚠️ 'gnome-terminal' not found. Trying 'x-terminal-emulator'...")
         try:
@@ -187,7 +192,7 @@ def main():
         cam = phobos.Cred3()
         # Force use_dark to False for dark acquisition
         cam.use_dark = False
-        cam.take_darks(nb_frames=100) 
+        cam.take_darks(nb_frames=1000) 
         print("✅ Dark frames acquired and saved.")
     except Exception as e:
         print(f"❌ Error acquiring dark frames: {e}")
@@ -195,10 +200,16 @@ def main():
     
     # 4. Apply Configuration (Restore Hardware State)
     print("\n🔄 Applying configuration to hardware...")
-    try:
-        phobos.config.apply()
-    except Exception as e:
-        print(f"⚠️  Configuration application failed: {e}")
+    # Ask confirmation before resetting hardware state. Default: do not reset.
+    ans = input("Reset hardware state to the saved configuration? (y/N): ").strip().lower()
+    if ans in ('y', 'yes'):
+        try:
+            phobos.config.apply()
+            print("✅ Hardware configuration applied.")
+        except Exception as e:
+            print(f"⚠️  Configuration application failed: {e}")
+    else:
+        print("ℹ️ Skipping hardware reset (default).")
 
     # 5. Manual Power-Up
     print("\n⚡ MANUAL POWER-UP SEQUENCE")

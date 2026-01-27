@@ -391,7 +391,7 @@ class _Arch:
         if verbose:
             print(f"✅ DAC calibration completed for {self.name} (shifters {list(self.topas)}).")
     
-    def phase_calibration(self, samples: int, plot: bool = False, verbose: bool = False):
+    def phase_calibration(self, samples: int = 100, plot: bool = False, verbose: bool = False):
         """
         Calibrate phase-to-power conversion coefficients for all shifters in this chip.
         
@@ -402,20 +402,15 @@ class _Arch:
         Parameters
         ----------
         samples : int
-            Number of power steps for the scan.
+            Number of power steps for the scan. Default is 100.
         plot : bool, optional
             If True, plot the fitted curves. Default is False.
         verbose : bool, optional
             If True, print calibration details. Default is False.
         """
 
-        
-        power_range = np.linspace(0, 1, samples)
-        
-        # Define the fitting function: (A + F*P) * sin(B * P + C) + D * P + E
-        # def sine_func(x, A, B, C, D, E, F):
-        #     return (A + F * x) * np.sin(B * x + C) + D * x + E
-
+        power_range = np.linspace(0, 1, samples) # Power from 0 to 1W
+    
         def sine_func(x, A, B, C, D, E):
             return A * np.sin(2*np.pi/B * x + C) + D * x + E
             
@@ -548,17 +543,17 @@ class _Arch:
                 # So Power = Phase * Coeff => T = 2pi * Coeff => Coeff = T / 2pi
                 new_coeff = avg_period / (2 * np.pi)
                 
-                XPOW().PHASE_CONVERSION[channel.channel - 1] = new_coeff
+                shifter.phase_factor = new_coeff
                 
                 if verbose:
-                    print(f"  ✅ Channel {channel.channel} calibrated: Period={avg_period:.4f} W -> Coeff={new_coeff:.4f} W/rad")
+                    print(f"  ✅ Shifter {shifter.channel} calibrated: Period={avg_period:.4f} W -> Coeff={new_coeff:.4f} W/rad")
             else:
                 if verbose:
-                    print(f"  ❌ Channel {channel.channel} calibration failed: no valid fits.")
-            
+                    print(f"  ❌ Shifter {shifter.channel} calibration failed: no valid fits.")
+
             # Turn off channel before next
-            channel.turn_off()
-            
+            shifter.turn_off()
+
         if plot:
             # Hide unused subplots
             for j in range(len(self.shifters), len(axs)):
