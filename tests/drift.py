@@ -6,7 +6,7 @@ from typing import Optional, Sequence, Any, List, Tuple
 
 import numpy as np
 import phobos
-
+import matplotlib.pyplot as plt
 
 def _capture_loop(cam: Any,
                   stop_event: threading.Event,
@@ -118,7 +118,7 @@ def main(interval: float = 1.0,
     }
 
     # get archive folder from phobos
-    archive_path = phobos.archive.new()  # expected to return a directory path
+    archive_path = phobos.archive.new(name="Drift Record")  # expected to return a directory path
     archive_path = os.fspath(archive_path)
     os.makedirs(archive_path, exist_ok=True)
 
@@ -129,10 +129,131 @@ def main(interval: float = 1.0,
     with open(meta_file, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
 
+    plot_flux_timeseries(archive_path=str(archive_path))
+
     print(f"Saved data to: {data_file}")
     print(f"Saved metadata to: {meta_file}")
 
+def plot_flux_timeseries(times: Optional[np.ndarray] = None,
+                         fluxes: Optional[np.ndarray] = None,
+                         archive_path: Optional[str] = None,
+                         npz_filename: str = "flux_record.npz",
+                         n_signals: int = 4,
+                         out_filename: str = "flux_timeseries.png",
+                         show: bool = True):
+    """
+    Plot flux time series for the first `n_signals` outputs and their mean.
+
+    This function can either accept `times` and `fluxes` arrays directly, or it can
+    load them from an archive directory by providing `archive_path`. When `archive_path`
+    is given the function will try to load the NumPy archive named `npz_filename`
+    (expected keys: 'times' or 'times_sec', and 'fluxes').
+
+    Parameters
+    ----------
+    times : Optional[np.ndarray]
+        1D array of time stamps (seconds, relative or absolute). If None and
+        `archive_path` is provided, times will be loaded from the archive.
+    fluxes : Optional[np.ndarray]
+        2D array of shape (n_samples, n_outputs) containing integrated fluxes.
+        If None and `archive_path` is provided, fluxes will be loaded from the archive.
+    archive_path : Optional[str]
+        Path to the archive directory containing the numpy data file.
+    npz_filename : str, optional
+        Name of the .npz file inside the archive (default "flux_record.npz").
+    n_signals : int, optional
+        Number of individual outputs to plot (default 4). If there are fewer outputs,
+        all available outputs are plotted.
+    out_filename : str, optional
+        Name of the saved figure file inside the archive (default "flux_timeseries.png").
+    show : bool, optional
+        If True (default), call plt.show() after plotting.
+
+    Returns
+    -------
+    tuple
+        (fig, ax) matplotlib figure and axis objects.
+
+    Examples
+    --------
+    >>> # Load from archive
+    >>> fig, ax = plot_flux_timeseries(archive_path='/data/archive/2025-12-19/001')
+    >>> # Or provide arrays directly
+    >>> fig, ax = plot_flux_timeseries(times=times_arr, fluxes=flux_arr)
+    """
+    # If archive_path is provided, try to load data from it
+    if archive_path is not None:
+        archive_path = os.fspath(archive_path)
+        npz_path = os.path.join(archive_path, npz_filename)
+        if not os.path.exists(npz_path):
+            raise FileNotFoundError(f"Archive file not found: {npz_path}")
+        with np.load(npz_path) as data:
+            # Accept multiple possible key names for times
+            if 'times' in data:
+                times = data['times']
+            elif 'times_sec' in data:
+                times = data['times_sec']
+            else:
+                raise KeyError(f"No 'times' or 'times_sec' key found in {npz_path}")
+            if 'fluxes' in data:
+                fluxes = data['fluxes']
+            elif 'fluxes' not in data:
+                # try alternative key names
+                keys = list(data.keys())
+                raise KeyError(f"No 'fluxes' key found in {npz_path}. Keys: {keys}")
+
+    if times is None or fluxes is None:
+        raise ValueError("times and fluxes must be provided either directly or via archive_path")
+
+    # Validate and normalize inputs
+    times = np.asarray(times).ravel()
+    fluxes = np.asarray(fluxes, dtype=float)
+    if fluxes.ndim == 1:
+        fluxes = fluxes[:, None]
+
+    n_outputs = fluxes.shape[1]
+    n_plot = min(n_signals, n_outputs)
+
+    # Select outputs to plot (first n_plot)
+    indices = list(range(n_plot))
+
+    # Compute mean of plotted outputs (ignore NaNs)
+    mean_flux = np.nanmean(fluxes[:, indices], axis=1)
+
+    # Create plot
+    fig, ax = plt.subplots(figsize=(10, 5))
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    for j, idx in enumerate(indices):
+        ax.plot(times, fluxes[:, idx], label=f"Output {idx+1}", color=colors[j % len(colors)], alpha=0.85)
+    ax.plot(times, mean_flux, label="Mean of plotted outputs", color="k", linewidth=2)
+
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Integrated flux (ADU)")
+    ax.set_title("Flux time series")
+    ax.grid(True)
+    ax.legend(loc="best")
+    fig.tight_layout()
+
+    # Save figure into archive if requested or if archive_path provided
+    save_dir = archive_path
+    if save_dir is None:
+        try:
+            save_dir = phobos.archive.new()
+        except Exception:
+            save_dir = None
+
+    if save_dir is not None:
+        save_dir = os.fspath(save_dir)
+        os.makedirs(save_dir, exist_ok=True)
+        out_path = os.path.join(save_dir, out_filename)
+        fig.savefig(out_path, dpi=150)
+        print(f"Plot saved to: {out_path}")
+
+    if show:
+        plt.show()
+
+    return fig, ax
+
 
 if __name__ == "__main__":
-    # Example usage: adjust interval, crop_centers and crop_size as needed.
     main(interval=1.0, crop_centers=None, crop_size=None)
