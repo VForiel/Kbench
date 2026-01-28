@@ -3,6 +3,7 @@ import os
 import json
 import time
 from pathlib import Path
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 from .. import bmc
 
@@ -198,10 +199,161 @@ class DM(metaclass=Singleton):
             self.segments[seg_idx].set_ptt(-1150, 0, -5.47)
         
         print(f"Turned off injection segments: {seg_indices}")
-    
-    def max(self, segments=None):
+
+    def _parse_injection_segments(self, segments: Optional[Union[int, Sequence[int]]]=None) -> List[int]:
+        """Parse user-facing injection input numbers into DM segment indices.
+
+        Parameters
+        ----------
+        segments : int, sequence of int, or None
+            Injection input number(s) (1..N) or None for all injection segments.
+
+        Returns
+        -------
+        list[int]
+            DM segment indices.
         """
-        Reset specified injection segments to optimal injection position.
+
+        if segments is None:
+            segments=np.array([1,2,3,4])
+
+        injection_segments = Config().get('dm.injection_segments')
+
+        if isinstance(segments, int):
+            segments_list = [segments]
+        else:
+            segments_list = list(segments)
+
+        seg_indices: List[int] = []
+        for seg_num in segments_list:
+            if not 1 <= int(seg_num) <= len(injection_segments):
+                raise ValueError(
+                    f"Segment number must be between 1 and {len(injection_segments)}, got {seg_num}"
+                )
+            seg_indices.append(injection_segments[int(seg_num) - 1])
+        return seg_indices
+
+    def _get_ptt_map(self, key: str) -> Dict[str, List[float]]:
+        """Return a PTT mapping from config.
+
+        Parameters
+        ----------
+        key : str
+            Config key under `dm.*` (e.g. `dm.ptt_max`, `dm.ptt_balanced`).
+
+        Returns
+        -------
+        dict
+            Mapping from segment index (as string) to `[piston_nm, tip_mrad, tilt_mrad]`.
+        """
+        import phobos
+
+        data = phobos.config.get(key, {})
+        return data if isinstance(data, dict) else {}
+
+    def _set_ptt_map(self, key: str, value: Dict[str, List[float]], autosave: bool = True) -> None:
+        """Persist a PTT mapping to config.
+
+        Parameters
+        ----------
+        key : str
+            Config key under `dm.*`.
+        value : dict
+            Mapping from segment index (as string) to `[piston_nm, tip_mrad, tilt_mrad]`.
+        autosave : bool, optional
+            If True, persist immediately. If False, only update the in-memory
+            config cache (useful to batch multiple updates without creating many backups).
+        """
+        import phobos
+
+        phobos.config.set(key, value, autosave=autosave)
+
+    def _measure_total_output_flux(self) -> float:
+        """Measure total injected flux as sum over all camera outputs.
+
+        Returns
+        -------
+        float
+            Total flux (arbitrary units).
+        """
+        import phobos
+
+        outs = phobos.Cred3().get_outputs(flux_mode='sum')
+        return float(np.sum(outs))
+
+    def _grid_search_tip_tilt(
+        self,
+        seg_idx: int,
+        tip_grid: np.ndarray,
+        tilt_grid: np.ndarray,
+        objective: Callable[[float], float],
+        piston: float = 0.0,
+        settle_time_s: float = 0.0,
+        plot: bool = False,
+        label: str = "",
+    ) -> Tuple[float, float, float, Optional[np.ndarray]]:
+        """Brute-force grid search for (tip, tilt) that maximizes an objective.
+
+        Notes
+        -----
+        - `tip_grid` and `tilt_grid` are in mrad.
+        - `objective` is called with measured total flux.
+        - Returns values in the same units expected by `Segment.set_ptt` (mrad).
+        """
+        flux_map = np.full((len(tip_grid), len(tilt_grid)), np.nan, dtype=float)
+
+        best_score = -np.inf
+        best_tip = 0.0
+        best_tilt = 0.0
+        best_flux = np.nan
+
+        # Preserve current state to restore later
+        p0, t0, tt0 = self.segments[seg_idx].get_ptt()
+
+        try:
+            for i, tip in enumerate(tip_grid):
+                for j, tilt in enumerate(tilt_grid):
+                    self.segments[seg_idx].set_ptt(piston, float(tip), float(tilt))
+                    if settle_time_s > 0:
+                        time.sleep(settle_time_s)
+                    flux = self._measure_total_output_flux()
+                    score = float(objective(flux))
+                    flux_map[i, j] = flux
+                    if score > best_score:
+                        best_score = score
+                        best_tip = float(tip)
+                        best_tilt = float(tilt)
+                        best_flux = float(flux)
+        finally:
+            # restore
+            self.segments[seg_idx].set_ptt(p0, t0, tt0)
+
+        if plot:
+            try:
+                import matplotlib.pyplot as plt
+                from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+                plt.figure(figsize=(6, 5))
+                plt.title(label or f"Injection segment {seg_idx}: flux map")
+                plt.imshow(
+                    flux_map.T,
+                    origin='lower',
+                    aspect='auto',
+                    extent=[tip_grid[0], tip_grid[-1], tilt_grid[0], tilt_grid[-1]],
+                )
+                plt.xlabel("tip (mrad)")
+                plt.ylabel("tilt (mrad)")
+                plt.colorbar(label="total output flux")
+                plt.scatter([best_tip], [best_tilt], c='w', s=50)
+                plt.tight_layout()
+                plt.show()
+            except Exception as e:
+                print(f"⚠️ Plot skipped: {e}")
+
+        return best_tip, best_tilt, best_flux, (flux_map if plot else None)
+    
+    def flat(self, segments=None):
+        """Reset specified injection segments to flat (piston=0, tip=0, tilt=0).
         
         This returns the segments to their nominal position for maximum light coupling.
         
@@ -217,34 +369,473 @@ class DM(metaclass=Singleton):
         Examples
         --------
         >>> dm = DM()
-        >>> dm.max(1)           # Optimize first injection input
-        >>> dm.max([1, 3])      # Optimize inputs 1 and 3
-        >>> dm.max()            # Optimize all injection inputs
+    >>> dm.flat(1)          # Flatten first injection input
+    >>> dm.flat([1, 3])     # Flatten inputs 1 and 3
+    >>> dm.flat()           # Flatten all injection inputs
         
         Notes
         -----
-        The optimal position is: piston=0 nm, tip=0 mrad, tilt=0 mrad
+    The flat position is: piston=0 nm, tip=0 mrad, tilt=0 mrad
         """
-        # Parse segment indices
-        if segments is None:
-            # Optimize all injection segments
-            seg_indices = Config().get('dm.injection_segments')
-        else:
-            # Convert input number(s) (1-4) to segment indices
-            if isinstance(segments, int):
-                segments = [segments]
-            
-            seg_indices = []
-            for seg_num in segments:
-                if not 1 <= seg_num <= len(Config().get('dm.injection_segments')):
-                    raise ValueError(f"Segment number must be between 1 and {len(Config().get('dm.injection_segments'))}, got {seg_num}")
-                seg_indices.append(Config().get('dm.injection_segments')[seg_num - 1])
+        seg_indices = self._parse_injection_segments(segments)
         
-        # Apply optimal position to selected segments
+        # Apply flat position to selected segments
         for seg_idx in seg_indices:
             self.segments[seg_idx].set_ptt(0, 0, 0)
         
-        print(f"Optimized injection segments: {seg_indices}")
+        print(f"Flattened injection segments: {seg_indices}")
+
+    def max(self, segments=None):
+        """Apply stored 'max' injection calibration (tip/tilt) for selected segments.
+
+        Parameters
+        ----------
+        segments : int, array-like, or None
+            Injection input number(s) (1..N), or None for all injection segments.
+        """
+        seg_indices = self._parse_injection_segments(segments)
+        max_map = self._get_ptt_map('dm.ptt_max')
+
+        if not max_map:
+            raise RuntimeError(
+                "No 'max' injection calibration found. Run DM().calibrate_injection() first."
+            )
+
+        for seg_idx in seg_indices:
+            ptt = max_map.get(str(seg_idx))
+            if ptt is None:
+                raise KeyError(f"No 'max' calibration for segment {seg_idx}")
+            self.segments[seg_idx].set_ptt(float(ptt[0]), float(ptt[1]), float(ptt[2]))
+
+        print(f"Applied MAX injection calibration on segments: {seg_indices}")
+
+    def calibrate_injection(
+        self,
+        plot: bool = False,
+        grid_n: int = 20,
+        tip_range_mrad: float = 2.0,
+        tilt_range_mrad: float = 2.0,
+        piston_nm: float = -1150.0,
+        verbose: bool = False,
+        use_tqdm: bool = True,
+    ) -> Dict[str, Dict[str, List[float]]]:
+        """Calibrate injection tip/tilt settings.
+
+        This routine calibrates tip/tilt for all injection segments defined in
+                `dm.injection_segments`.
+
+                Two calibrations are produced:
+                - `max`: find the maximum-injection tip/tilt point using a centroid estimate
+                    of the injection map.
+                - `balanced`: choose the weakest segment (based on its `max` flux) as reference
+                    and, for each other segment, select the point along the line from (0, 0)
+                    to `tt_max` where the injected flux matches the reference flux.
+
+        Parameters
+        ----------
+        plot : bool, optional
+            If True, plot injection maps for each segment. Default is False.
+        grid_n : int, optional
+            Number of grid points per axis for the tip/tilt scan. Default is 20.
+        tip_range_mrad : float, optional
+            Tip scan range is [-tip_range_mrad, tip_range_mrad]. Default is 2.
+        tilt_range_mrad : float, optional
+            Tilt scan range is [-tilt_range_mrad, tilt_range_mrad]. Default is 2.
+        piston_nm : float, optional
+            Fixed piston value during calibration (nm). Default is -1150.
+        verbose : bool, optional
+            If True, print centroid and balanced-point computations. Default is False.
+        use_tqdm : bool, optional
+            If True, show a tqdm progress bar when tqdm is available. Default is True.
+
+        Notes
+        -----
+        - A single scan is performed per segment (default 20x20 points).
+        - The scan range is typically [-2, 2] mrad for both tip and tilt.
+        - Piston is kept fixed at `dm.injection_piston_nm` (default -1150 nm).
+
+        Returns
+        -------
+        dict
+            A dict with keys `max` and `balanced`, each mapping segment indices to
+            `[piston, tip, tilt]` values (piston in nm, tip/tilt in mrad).
+        """
+        import phobos
+
+        injection_seg_indices = self._parse_injection_segments(None)
+
+        # Start from a known safe baseline
+        self.off(None)
+        time.sleep(Config().get('dm.stabilization_time', 0.01))
+
+        # We generally keep piston at the injection working point and scan only tip/tilt.
+        # Use explicit parameters; config keys can still be used by callers
+        # by passing values from Config().get(...).
+        injection_piston_nm = float(piston_nm)
+        settle_time_s = float(Config().get('dm.stabilization_time', 0.01))
+
+        # Local helpers: centroid + balanced point along ray
+        def _centroid_tip_tilt(
+            flux_map: np.ndarray,
+            tip_vals: np.ndarray,
+            tilt_vals: np.ndarray,
+        ) -> Tuple[float, float]:
+            w = np.asarray(flux_map, dtype=float)
+            w = np.clip(w, 0.0, None)
+            s = float(np.sum(w))
+            if not np.isfinite(s) or s <= 0:
+                return 0.0, 0.0
+
+            tip_grid2d, tilt_grid2d = np.meshgrid(tip_vals, tilt_vals, indexing='ij')
+            tip_c = float(np.sum(w * tip_grid2d) / s)
+            tilt_c = float(np.sum(w * tilt_grid2d) / s)
+            return tip_c, tilt_c
+
+        def _flux_on_ray(
+            flux_map: np.ndarray,
+            tip_vals: np.ndarray,
+            tilt_vals: np.ndarray,
+            tip_max: float,
+            tilt_max: float,
+            s_min: float = -1.0,
+            s_max: float = 1.0,
+        ) -> Tuple[np.ndarray, np.ndarray]:
+            # We scan along the line crossing the origin and tt_max.
+            # Using s in [-1, 1] allows solutions on either side of (0,0).
+            s_vals = np.linspace(float(s_min), float(s_max), max(len(tip_vals), len(tilt_vals)))
+            # nearest-neighbour sampling on the map
+            tip_idx = np.clip(np.round((s_vals * tip_max - tip_vals[0]) / (tip_vals[-1] - tip_vals[0]) * (len(tip_vals) - 1)).astype(int), 0, len(tip_vals) - 1)
+            tilt_idx = np.clip(np.round((s_vals * tilt_max - tilt_vals[0]) / (tilt_vals[-1] - tilt_vals[0]) * (len(tilt_vals) - 1)).astype(int), 0, len(tilt_vals) - 1)
+            flux_s = flux_map[tip_idx, tilt_idx]
+            return s_vals, flux_s
+
+        def _bilinear_interpolate(
+            values: np.ndarray,
+            x_axis: np.ndarray,
+            y_axis: np.ndarray,
+            x: float,
+            y: float,
+        ) -> float:
+            """Bilinear interpolation on a regular grid.
+
+            Parameters
+            ----------
+            values : np.ndarray
+                Array with shape (len(x_axis), len(y_axis)).
+            x_axis, y_axis : np.ndarray
+                Monotonic axes corresponding to values indices.
+            x, y : float
+                Query point.
+
+            Returns
+            -------
+            float
+                Interpolated value.
+            """
+            x0 = float(x_axis[0])
+            x1 = float(x_axis[-1])
+            y0 = float(y_axis[0])
+            y1 = float(y_axis[-1])
+
+            if x1 == x0 or y1 == y0:
+                return float('nan')
+
+            # Clamp to grid bounds
+            xc = float(np.clip(x, x0, x1))
+            yc = float(np.clip(y, y0, y1))
+
+            # Fractional index coordinates
+            fx = (xc - x0) / (x1 - x0) * (len(x_axis) - 1)
+            fy = (yc - y0) / (y1 - y0) * (len(y_axis) - 1)
+            ix0 = int(np.floor(fx))
+            iy0 = int(np.floor(fy))
+            ix1 = int(np.clip(ix0 + 1, 0, len(x_axis) - 1))
+            iy1 = int(np.clip(iy0 + 1, 0, len(y_axis) - 1))
+            ix0 = int(np.clip(ix0, 0, len(x_axis) - 1))
+            iy0 = int(np.clip(iy0, 0, len(y_axis) - 1))
+            tx = float(fx - ix0)
+            ty = float(fy - iy0)
+
+            v00 = float(values[ix0, iy0])
+            v10 = float(values[ix1, iy0])
+            v01 = float(values[ix0, iy1])
+            v11 = float(values[ix1, iy1])
+            # Blend
+            v0 = (1.0 - tx) * v00 + tx * v10
+            v1 = (1.0 - tx) * v01 + tx * v11
+            return (1.0 - ty) * v0 + ty * v1
+
+        def _balanced_on_ray(
+            flux_map: np.ndarray,
+            tip_vals: np.ndarray,
+            tilt_vals: np.ndarray,
+            tip_max: float,
+            tilt_max: float,
+            target_flux: float,
+        ) -> Tuple[float, float, float]:
+            # Sample a dense 1D profile along the tt_0->tt_max line.
+            # We interpret this 1D profile as (approximately) Gaussian-shaped.
+            n_s = int(max(200, 10 * max(len(tip_vals), len(tilt_vals))))
+            s_vals = np.linspace(-1.0, 1.0, n_s)
+            tip_s = s_vals * float(tip_max)
+            tilt_s = s_vals * float(tilt_max)
+            flux_s = np.array(
+                [
+                    _bilinear_interpolate(flux_map, tip_vals, tilt_vals, float(tx), float(ty))
+                    for tx, ty in zip(tip_s, tilt_s)
+                ],
+                dtype=float,
+            )
+
+            # Fallback (closest sample) in case the fit fails.
+            def _fallback() -> Tuple[float, float, float]:
+                idx0 = int(np.nanargmin(np.abs(flux_s - target_flux)))
+                tip_b0 = float(tip_s[idx0])
+                tilt_b0 = float(tilt_s[idx0])
+                return tip_b0, tilt_b0, float(flux_s[idx0])
+
+            if not np.any(np.isfinite(flux_s)):
+                return _fallback()
+
+            # Estimate Gaussian parameters in log-space: log(f) = log(A) - (s-mu)^2/(2*sigma^2)
+            # We only use positive flux samples for log.
+            mask = np.isfinite(flux_s) & (flux_s > 0)
+            if np.count_nonzero(mask) < 6:
+                return _fallback()
+
+            y = np.log(flux_s[mask])
+            x = s_vals[mask]
+
+            # Quadratic fit y ~= c2*x^2 + c1*x + c0
+            try:
+                c2, c1, c0 = np.polyfit(x, y, deg=2)
+            except Exception:
+                return _fallback()
+
+            # For a Gaussian, c2 should be negative.
+            if not np.isfinite(c2) or c2 >= 0:
+                return _fallback()
+
+            # Recover mu, sigma, A
+            mu = float(-c1 / (2.0 * c2))
+            sigma = float(np.sqrt(-1.0 / (2.0 * c2)))
+            if not np.isfinite(mu) or not np.isfinite(sigma) or sigma <= 0:
+                return _fallback()
+
+            logA = float(c0 - (c1 * c1) / (4.0 * c2))
+            A = float(np.exp(logA))
+            if not np.isfinite(A) or A <= 0:
+                return _fallback()
+
+            # Solve A * exp(-(s-mu)^2/(2*sigma^2)) = target_flux
+            if target_flux <= 0 or target_flux > A:
+                # target above fitted peak (or invalid) -> closest sample fallback
+                return _fallback()
+
+            rhs = -2.0 * sigma * sigma * float(np.log(float(target_flux) / A))
+            if rhs < 0:
+                return _fallback()
+
+            delta = float(np.sqrt(rhs))
+            candidates = [mu - delta, mu + delta]
+            # Pick candidate within [-1,1] closest to the tt_max side (s=+1)
+            cand_in = [s for s in candidates if -1.0 <= s <= 1.0]
+            if not cand_in:
+                return _fallback()
+
+            s_star = float(min(cand_in, key=lambda s: abs(1.0 - s)))
+            tip_b = float(s_star * tip_max)
+            tilt_b = float(s_star * tilt_max)
+            flux_b = float(A * np.exp(-((s_star - mu) ** 2) / (2.0 * sigma * sigma)))
+            return tip_b, tilt_b, flux_b
+
+        # Scan parameters (single scan per segment)
+        tip_grid = np.linspace(-float(tip_range_mrad), float(tip_range_mrad), int(grid_n))
+        tilt_grid = np.linspace(-float(tilt_range_mrad), float(tilt_range_mrad), int(grid_n))
+
+        # Optional tqdm progress bar
+        iterator = injection_seg_indices
+        if use_tqdm:
+            try:
+                from tqdm import tqdm  # type: ignore
+
+                iterator = tqdm(injection_seg_indices, desc="Calibrating injection", leave=True)
+            except Exception:
+                iterator = injection_seg_indices
+
+        flux_maps: Dict[int, np.ndarray] = {}
+        max_ptt: Dict[str, List[float]] = {}
+        balanced_ptt: Dict[str, List[float]] = {}
+
+        tt_max: Dict[int, Tuple[float, float]] = {}
+        flux_at_max: Dict[int, float] = {}
+
+        # --- Single scan per segment ---
+        for seg_idx in iterator:
+            self.off(None)
+            self.segments[seg_idx].set_ptt(injection_piston_nm, 0.0, 0.0)
+            time.sleep(settle_time_s)
+
+            # Build the flux map
+            flux_map = np.full((len(tip_grid), len(tilt_grid)), np.nan, dtype=float)
+            for i, tip in enumerate(tip_grid):
+                for j, tilt in enumerate(tilt_grid):
+                    self.segments[seg_idx].set_ptt(injection_piston_nm, float(tip), float(tilt))
+                    if settle_time_s > 0:
+                        time.sleep(settle_time_s)
+                    flux_map[i, j] = self._measure_total_output_flux()
+
+            flux_maps[seg_idx] = flux_map
+
+            # tt_max from centroid of the "gaussian-like" lobe
+            tip_c, tilt_c = _centroid_tip_tilt(flux_map, tip_grid, tilt_grid)
+            # snap to nearest sample for flux readout
+            i0 = int(np.nanargmin(np.abs(tip_grid - tip_c)))
+            j0 = int(np.nanargmin(np.abs(tilt_grid - tilt_c)))
+            flux_c = float(flux_map[i0, j0])
+
+            tt_max[seg_idx] = (float(tip_grid[i0]), float(tilt_grid[j0]))
+            flux_at_max[seg_idx] = flux_c
+            max_ptt[str(seg_idx)] = [float(injection_piston_nm), float(tip_grid[i0]), float(tilt_grid[j0])]
+
+            if verbose:
+                print(f"[calibrate_injection] seg={seg_idx}: centroid->(tip,tilt)=({tip_c:.3f},{tilt_c:.3f}) mrad; snapped=({tip_grid[i0]:.3f},{tilt_grid[j0]:.3f}); flux_max={flux_c:.3g}")
+
+        # Reference is the weakest segment at its max point
+        if len(flux_at_max) == 0:
+            raise RuntimeError("No injection segments found for calibration")
+        ref_seg = min(flux_at_max, key=lambda k: flux_at_max[k])
+        ref_flux = float(flux_at_max[ref_seg])
+
+        flux_at_balanced: Dict[int, float] = {}
+        for seg_idx in injection_seg_indices:
+            tip_m, tilt_m = tt_max[seg_idx]
+            if seg_idx == ref_seg:
+                balanced_ptt[str(seg_idx)] = list(max_ptt[str(seg_idx)])
+                flux_at_balanced[seg_idx] = float(flux_at_max[seg_idx])
+                continue
+
+            tip_b, tilt_b, flux_b = _balanced_on_ray(
+                flux_map=flux_maps[seg_idx],
+                tip_vals=tip_grid,
+                tilt_vals=tilt_grid,
+                tip_max=tip_m,
+                tilt_max=tilt_m,
+                target_flux=ref_flux,
+            )
+            balanced_ptt[str(seg_idx)] = [float(injection_piston_nm), float(tip_b), float(tilt_b)]
+            flux_at_balanced[seg_idx] = float(flux_b)
+
+            if verbose:
+                print(f"[calibrate_injection] seg={seg_idx}: balanced on ray to match ref_flux={ref_flux:.3g} -> (tip,tilt)=({tip_b:.3f},{tilt_b:.3f}) mrad; flux_bal={flux_b:.3g}")
+
+        if plot:
+            try:
+                import matplotlib.pyplot as plt
+                from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+                ncols = len(injection_seg_indices)
+                fig, axes = plt.subplots(1, ncols, figsize=(4.5 * ncols, 4.5), squeeze=False)
+                fig.suptitle("Injection calibration maps", y=1.02)
+
+                im_for_cbar = None
+
+                for col, seg_idx in enumerate(injection_seg_indices):
+                    ax = axes[0, col]
+                    flux_map = flux_maps[seg_idx]
+                    im = ax.imshow(
+                        flux_map.T,
+                        origin='lower',
+                        aspect='auto',
+                        extent=[tip_grid[0], tip_grid[-1], tilt_grid[0], tilt_grid[-1]],
+                    )
+                    if im_for_cbar is None:
+                        im_for_cbar = im
+                    ax.set_title(f"seg {seg_idx}")
+                    ax.set_xlabel("tip (mrad)")
+                    ax.set_ylabel("tilt (mrad)")
+
+                    tip_m, tilt_m = tt_max[seg_idx]
+                    tip_b = float(balanced_ptt[str(seg_idx)][1])
+                    tilt_b = float(balanced_ptt[str(seg_idx)][2])
+
+                    # Markers / line conventions:
+                    # - tt_0: cross at (0,0)
+                    # - tt_max: triangle
+                    # - tt_bal: circle
+                    # - Ray: red dashed line
+                    f_m = float(flux_at_max[seg_idx])
+                    f_b = float(flux_at_balanced[seg_idx])
+
+                    # Flux at tt_0 is the map value at the nearest grid point to (0, 0)
+                    i00 = int(np.nanargmin(np.abs(tip_grid - 0.0)))
+                    j00 = int(np.nanargmin(np.abs(tilt_grid - 0.0)))
+                    f_0 = float(flux_map[i00, j00])
+
+                    ax.scatter([0.0], [0.0], marker='x', c='w', s=60, label=f"tt_0 (f={f_0:.3g})")
+                    ax.scatter([tip_m], [tilt_m], marker='^', c='w', s=60, label=f"tt_max (f={f_m:.3g})")
+                    ax.plot([0.0, tip_m], [0.0, tilt_m], color='r', linestyle='--', linewidth=1.8, alpha=0.9)
+                    ax.scatter([tip_b], [tilt_b], marker='o', c='w', s=55, label=f"tt_bal (f={f_b:.3g})")
+
+                    ax.legend(loc='upper right', framealpha=0.7)
+
+                # Shared colorbar placed at the far right of the whole row
+                if im_for_cbar is not None:
+                    divider = make_axes_locatable(axes[0, -1])
+                    cax = divider.append_axes("right", size="4%", pad=0.15)
+                    fig.colorbar(im_for_cbar, cax=cax, label="total output flux")
+
+                plt.tight_layout()
+                plt.show()
+            except Exception as e:
+                print(f"⚠️ Plot skipped: {e}")
+
+        # Persist only the calibrated PTT maps as requested.
+        # Batch updates to avoid creating multiple backups.
+        self._set_ptt_map('dm.ptt_max', max_ptt, autosave=False)
+        self._set_ptt_map('dm.ptt_balanced', balanced_ptt, autosave=False)
+
+        # Single save at the end
+        phobos.config.save_to_file()
+
+        print("✅ Injection calibration saved to config under dm.ptt_max and dm.ptt_balanced")
+        return {'max': max_ptt, 'balanced': balanced_ptt}
+
+    def balanced(self, segments=None):
+        """Apply stored 'balanced' injection calibration (tip/tilt) for selected segments.
+
+        Parameters
+        ----------
+        segments : int, array-like, or None
+            Injection input number(s) (1..N), or None for all injection segments.
+        """
+        seg_indices = self._parse_injection_segments(segments)
+        bal_map = self._get_ptt_map('dm.ptt_balanced')
+
+        if not bal_map:
+            raise RuntimeError(
+                "No 'balanced' injection calibration found. Run DM().calibrate_injection() first."
+            )
+
+        for seg_idx in seg_indices:
+            ptt = bal_map.get(str(seg_idx))
+            if ptt is None:
+                raise KeyError(f"No 'balanced' calibration for segment {seg_idx}")
+            self.segments[seg_idx].set_ptt(float(ptt[0]), float(ptt[1]), float(ptt[2]))
+
+        print(f"Applied BALANCED injection calibration on segments: {seg_indices}")
+
+    # Backward compatibility: previous API used max() for flat.
+    def max_flat(self, segments=None):
+        """Deprecated alias for :meth:`flat` (kept for backward compatibility)."""
+        import warnings
+
+        warnings.warn(
+            "DM.max_flat() is deprecated; use DM.flat() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.flat(segments)
 
 #==============================================================================
 # Segment class
@@ -365,7 +956,7 @@ class Segment():
             The response of the mirror.
         """
         self.tip = value / 1000.0
-        response = dm.bmcdm.set_segment(self.id, self.piston, self.tip, self.tilt, True, True)
+        response = DM().bmcdm.set_segment(self.id, self.piston, self.tip, self.tilt, True, True)
         time.sleep(Config().get('dm.stabilization_time'))  # Stabilization delay for BMC hardware
         return response
 
@@ -408,7 +999,7 @@ class Segment():
             The response of the mirror.
         """
         self.tilt = value / 1000.0
-        response = DM().bmcdm.set_segment(self.id, self.piston, self.tip, value, True, True)
+        response = DM().bmcdm.set_segment(self.id, self.piston, self.tip, self.tilt, True, True)
         time.sleep(Config().get('dm.stabilization_time'))  # Stabilization delay for BMC hardware
         return response
 

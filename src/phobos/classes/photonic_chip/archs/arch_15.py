@@ -243,29 +243,29 @@ class Arch15(Arch, metaclass=Singleton):
         # Bright maximization (single shifters with different input pairs)
         print("  [1/7] Maximizing bright with inputs 1,2 → shifter 2")
         dm.off()
-        dm.max([1, 2])
+        dm.flat([1, 2])
         maximize_bright(2, plt_coords=(0, 0))
         
         print("  [2/7] Maximizing bright with inputs 3,4 → shifter 4")
         dm.off()
-        dm.max([3, 4])
+        dm.flat([3, 4])
         maximize_bright(4, plt_coords=(0, 1))
         
         print("  [3/7] Maximizing bright with inputs 1,3 → shifter 7")
         dm.off()
-        dm.max([1, 3])
+        dm.flat([1, 3])
         maximize_bright(7, plt_coords=(0, 2))
         
         # Darks maximization
         print("  [4/7] Maximizing dark pair [1,2] with inputs 1,4 (inverted) → shifter 8")
         dm.off()
-        dm.max([1, 4])  # Note: In simulation, input 4 is inverted (attenuation=-1)
+        dm.flat([1, 4])  # Note: In simulation, input 4 is inverted (attenuation=-1)
         maximize_darks(8, [1, 2], plt_coords=(1, 0))
         
         # Kernel minimization (requires all inputs active)
         print("  [5/7] Minimizing kernel 1 with input 1 only → shifter 11")
         dm.off()
-        dm.max([1])
+        dm.flat([1])
         minimize_kernel(11, 1, plt_coords=(2, 0))
         
         print("  [6/7] Minimizing kernel 2 with input 1 only → shifter 13")
@@ -279,7 +279,7 @@ class Arch15(Arch, metaclass=Singleton):
         # Skipped for now as it requires knowing if setup is monochromatic or not
         
         # Restore all inputs
-        dm.max()
+        dm.flat()
         
         if plot and plt is not None:
             axs[1, 1].axis('off')

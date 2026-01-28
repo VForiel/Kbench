@@ -511,11 +511,12 @@ class Arch6(Arch, metaclass=Singleton):
     def null_calibration_gen(
         self,
         beta: float = 0.8,
-        bright_output: int = 0,
+        bright_output: int = None,
         verbose: bool = False,
         plot: bool = False,
         figsize: tuple = (10, 10),
         save_as=None,
+        return_history: bool = False
     ) -> dict:
         """
         Optimize phase shifter offsets to maximize nulling performance (minimize Null-Depth).
@@ -528,7 +529,7 @@ class Arch6(Arch, metaclass=Singleton):
         beta : float, optional
             Descent step size. Default is 0.8.
         bright_output : int, optional
-            Index of the bright output channel. Default is 0.
+            Index of the bright output channel. Default is None (use config).
         verbose : bool, optional
             Print iteration details. Default is False.
         plot : bool, optional
@@ -537,6 +538,8 @@ class Arch6(Arch, metaclass=Singleton):
             Figure size for plots. Default is (10, 10).
         save_as : str, optional
             Path to save the plot.
+        return_history : bool, optional
+            If True, returns optimization history. Default is False.
             
         Returns
         -------
@@ -556,7 +559,8 @@ class Arch6(Arch, metaclass=Singleton):
         """
         
         # Get bright output from config
-        bright_output = Config().get('photonic_chip.bright_output', 0)
+        if bright_output is None:
+            bright_output = Config().get('photonic_chip.bright_output', 0)
         
         # Initial step size
         ε = 1e-4 # Minimum shift step size in radians
@@ -573,17 +577,16 @@ class Arch6(Arch, metaclass=Singleton):
         current_phases = [shifter.get_phase() for shifter in self.shifters]
         
         def get_metric():
-            outs = np.abs(Cred3().get_outputs())
-            # Expected outs: [Bright, Null1, Null2, Null3]
-            # Verify we have at least 4 outputs? 
-            # Trusting user input on crop_centers for now.
+            outs = np.abs(Cred3().get_outputs(flux_mode='sum'))
             
             b = outs[bright_output]
-            nulls_sum = np.sum(outs)/3 - b
-            
-            # Metric: Null-Depth = sum(Nulls) / Bright
-            metric = nulls_sum / b if b > 0 else 0
-            
+            # Remove bright output from outs
+            outs = np.delete(outs, int(bright_output))
+
+            max_null = np.max(outs)
+
+            metric = max_null / b
+
             return metric
             
         print("🧬 Starting Genetic Calibration for Arch6...")
@@ -621,21 +624,18 @@ class Arch6(Arch, metaclass=Singleton):
                 shifters_history.append(list(current_phases)) # Use cached values
                 
                 # Decision logic: Minimize Metric
-                updated = False
-                log += f"Shift {shifter.channel} Metric: {m_neg:.2e} | {m_old:.2e} | {m_pos:.2e} -> "
+                log += f"Shift {shifter.channel} Metric (-|=|+): {m_neg:.2e} | {m_old:.2e} | {m_pos:.2e} -> "
                 
                 if m_pos < m_old and m_pos < m_neg:
                     log += " + "
                     new_phase = (current_phase + Δφ) % (2 * np.pi)
                     shifter.set_phase(new_phase)
                     current_phases[i] = new_phase
-                    updated = True
                 elif m_neg < m_old and m_neg < m_pos:
                     log += " - "
                     new_phase = (current_phase - Δφ) % (2 * np.pi)
                     shifter.set_phase(new_phase)
                     current_phases[i] = new_phase
-                    updated = True
                 else:
                     log += " = "
                         
@@ -670,11 +670,14 @@ class Arch6(Arch, metaclass=Singleton):
             if save_as:
                 plt.savefig(save_as, dpi=150, bbox_inches='tight')
             plt.show()
-            
-        return {
-            "depth": np.array(depth_history),
-            "shifters": np.array(shifters_history)
-        }
+
+        if return_history:
+            return np.array(current_phases), {
+                "depth": np.array(depth_history),
+                "shifters": np.array(shifters_history)
+            }
+        else:
+            return np.array(current_phases)
 
     def predict_null_calibration_gen(
         self,

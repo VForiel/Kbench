@@ -85,7 +85,7 @@ class Config:
         except (KeyError, TypeError):
             return default
 
-    def set(self, key: str, value) -> None:
+    def set(self, key: str, value, autosave: bool = True) -> None:
         """
         Set a config value and save to file immediately.
         
@@ -95,6 +95,11 @@ class Config:
             Dot-notation key path (e.g., 'cred3.semid')
         value : any
             Value to set (must be YAML-serializable)
+        autosave : bool, optional
+            If True, persist to file immediately (and therefore create a backup).
+            If False, only update the in-memory cache; caller can later call
+            :meth:`_save_to_file` (or any method that saves) once.
+            Default is True.
             
         Examples
         --------
@@ -113,11 +118,12 @@ class Config:
         # Set the value
         data[keys[-1]] = value
         
-        # Persist to file
-        self._save_to_file()
-        
-        # Reload cache for consistency
-        self.reload()
+        if autosave:
+            # Persist to file
+            self._save_to_file()
+
+            # Reload cache for consistency
+            self.reload()
 
     def save(self):
         """
@@ -169,6 +175,18 @@ class Config:
              print(f"   ⚠️ Cred3 update skipped: {e}")
             
         print("✅ Hardware state saved to configuration.")
+
+    def save_to_file(self) -> None:
+        """Persist current in-memory configuration to disk once.
+
+        Notes
+        -----
+        This is useful when multiple keys have been updated with
+        ``autosave=False`` in :meth:`set` and you want to create only one
+        backup + write operation.
+        """
+        self._save_to_file()
+        self.reload()
         
     def apply(self):
         """

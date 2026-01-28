@@ -724,7 +724,7 @@ class _Arch:
             
             # Set DM: turn off all, then turn on selected inputs
             DM().off()  # Turn off all inputs
-            DM().max(active_inputs)  # Turn on selected inputs
+            DM().flat(active_inputs)  # Turn on selected inputs
             
             # Scan each shifter
             for shifter_idx, shifter in enumerate(self.shifters):
@@ -811,7 +811,7 @@ class _Arch:
         
         # Turn everything off at the end
         self.turn_off(verbose=False)
-        DM().max()  # Restore all inputs
+        DM().flat()  # Restore all inputs
         
         # Save consolidated archive
         archive_file = os.path.join(base_dir, "characterization_data.npz")
