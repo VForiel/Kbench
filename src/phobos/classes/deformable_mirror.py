@@ -39,12 +39,6 @@ class DM(metaclass=Singleton):
         self._initialized = True
 
         self.N_SEGMENTS = 169
-        
-        # Set injection segments
-        if injection_segments is None:
-            self._injection_segments = [138, 137, 136, 135]
-        else:
-            self._injection_segments = list(injection_segments)
 
         # Initialize the DM with the given serial number
         self.bmcdm = bmc.BmcDm()

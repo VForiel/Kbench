@@ -6,7 +6,7 @@ to find the flat position, best injection and off injection.
 """
 
 import phobos
-import kbench
+import phobos
 import matplotlib.pyplot as plt
 from xaosim.shmlib import shm
 import numpy as np
@@ -196,7 +196,7 @@ if __name__ == '__main__':
     save_path0 = '/media/photonics/SSD 128Go/data/'+'%04d'%(date_now.year)+'-'+'%02d'%(date_now.month)+'-'+'%02d'%(date_now.day)+'/'
     
 
-    dm = kbench.DM()
+    dm = phobos.DM()
     [dm.segments[seg].set_ptt(0, 0., 0.) for seg in active_segs0]
     print('All seg flat')
     

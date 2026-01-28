@@ -3,7 +3,7 @@ from xaosim.shmlib import shm
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from time import sleep
-import kbench
+import phobos
 import json
 from injection_opt import create_dir
 
@@ -17,7 +17,7 @@ def load_tt(json_path, key):
 save_path0 = '/media/photonics/SSD 128Go/data/2025-12-18/'
 save_path = create_dir(save_path0)
 
-dm = kbench.DM()
+dm = phobos.DM()
 segpath = save_path0+'001/TT_config.json'
 segOn = load_tt(segpath, 'segOn')
 [dm.segments[int(segOn[i, 0])].set_ptt(segOn[i, 1], segOn[i, 2], segOn[i, 3]) for i in range(segOn[:, 0].size)]

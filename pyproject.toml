@@ -26,7 +26,6 @@ classifiers = [
 
 [project.scripts]
 phob = "phobos.scripts.cli:main"
-kbch = "kbench.scripts.cli:main"
 
 [build-system]
 requires = ["setuptools>=64", "wheel"]
@@ -37,7 +36,7 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["phobos*", "kbench*", "bmc*"]
+include = ["phobos*"]
 
 [tool.setuptools.package-data]
 "bmc" = ["*.so"]

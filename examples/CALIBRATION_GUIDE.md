@@ -51,7 +51,7 @@ The `calibrate_obs` method performs systematic phase shifter calibration to opti
 ### Basic Example
 
 ```python
-from kbench import DM
+from phobos import DM
 from phobos.classes.cred3 import Cred3
 from phobos.classes.archs.arch_15 import Arch15
 
@@ -209,7 +209,7 @@ Each subplot shows:
 
 ## Differences from PHISE Simulation
 
-| Aspect | PHISE (Simulation) | Kbench (Hardware) |
+| Aspect | PHISE (Simulation) | PHOBos (Hardware) |
 |--------|-------------------|-------------------|
 | **Input control** | `chip.input_attenuation` array | DM `max([...])` method |
 | **Phase units** | Length units (with wavelength) | Radians (via `set_phase()`) |
@@ -220,7 +220,7 @@ Each subplot shows:
 ## References
 
 - Original PHISE implementation: [context.py#L867](https://github.com/VForiel/PHISE/blob/main/src/phise/classes/context.py#L867)
-- Kbench documentation: [docs/](../docs/)
+- PHOBos documentation: [docs/](../docs/)
 - Architecture details: [bench_overview.md](../docs/bench_overview.md)
 
 ## License

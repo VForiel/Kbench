@@ -6,7 +6,7 @@ Created on Wed Aug 13 15:39:06 2025
 @author: photonics
 """
 
-import kbench
+import phobos
 import matplotlib.pyplot as plt
 import numpy as np
 from xaosim.shmlib import shm
@@ -101,8 +101,8 @@ try:
 except:
     pass
 
-pup = kbench.PupilMask()
-dm = kbench.DM()
+pup = phobos.PupilMask()
+dm = phobos.DM()
 
 visi_list = []
 noise_list = []

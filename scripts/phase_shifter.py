@@ -6,7 +6,7 @@ Created on Tue Dec  2 15:50:12 2025
 @author: photonics
 """
 
-import kbench
+import phobos
 import matplotlib.pyplot as plt
 import numpy as np
 from xaosim.shmlib import shm
@@ -18,7 +18,7 @@ import json
 from injection_opt import check_cropping, create_dir, get_frame, crop_frames
 from time import sleep
 
-chip = kbench.Chip(6)
+chip = phobos.Chip(6)
 # chip.set_currents([300., 0., 0., 0.])
 # chip.set_voltages([30., 0., 0., 0.])
 
@@ -32,7 +32,7 @@ chip = kbench.Chip(6)
 # =============================================================================
 # Test the new set_power() method with auto-calibration
 # =============================================================================
-# channel = kbench.PhaseShifter(17)
+# channel = phobos.PhaseShifter(17)
 
 # channel.dac_calibration(verbose=True)
 
@@ -72,7 +72,7 @@ chip = kbench.Chip(6)
 # # =============================================================================
 # ramp = np.linspace(0., 1., 101)
 # datacube = []
-# channel = kbench.PhaseShifter(17)
+# channel = phobos.PhaseShifter(17)
 # wait = 0.005
 
 # cam = shm('/dev/shm/cred1.im.shm', nosem=False) # the source of data

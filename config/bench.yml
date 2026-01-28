@@ -6,12 +6,12 @@ cred3:
   dark_shm_path: /dev/shm/cred3_dark.im.shm
   img_shm_path: /dev/shm/cred1.im.shm
   output_centers:
-  - - 355
+  - - 354
     - 271
-  - - 355
+  - - 354
     - 255
   - - 355
-    - 239
+    - 240
   - - 355
     - 224
   output_sizes: 10

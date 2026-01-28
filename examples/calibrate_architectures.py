@@ -3,7 +3,7 @@
 Example script demonstrating the calibrate_obs method for Architecture 15 and 6.
 
 This script shows how to use the calibration methods adapted from the PHISE simulation
-project to work with real hardware in the Kbench optical bench.
+project to work with real hardware in the PHOBos optical bench.
 
 Requirements:
 - Deformable Mirror (DM) for input control
@@ -16,7 +16,7 @@ Date: 2025-12-18
 """
 
 import numpy as np
-from kbench import DM
+from phobos import DM
 from phobos.classes.cred3 import Cred3
 from phobos.classes.archs.arch_15 import Arch15
 from phobos.classes.archs.arch_6 import Arch6
@@ -182,7 +182,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(
-        description="Calibrate Kbench photonic chip architectures",
+    description="Calibrate PHOBos photonic chip architectures",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
