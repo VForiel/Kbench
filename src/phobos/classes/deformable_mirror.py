@@ -21,7 +21,6 @@ class DM(metaclass=Singleton):
     """
 
     from .config import Config
-    config = Config().dm
 
 
     _default_config_path = Path(__file__).parent.parent.parent / "config" / "DM" / "DM_config.json"
@@ -42,7 +41,7 @@ class DM(metaclass=Singleton):
 
         # Initialize the DM with the given serial number
         self.bmcdm = bmc.BmcDm()
-        self.bmcdm.open_dm(config.serial_number)
+        self.bmcdm.open_dm(Config().get('dm.serial_number'))
         self.segments = [Segment(self, i) for i in range(self.N_SEGMENTS)]
 
         # Set the initial configuration of the DM
@@ -53,7 +52,7 @@ class DM(metaclass=Singleton):
             for segment in self.segments:
                 segment.set_ptt(0, 0, 0)
 
-        time.sleep(stabilization_time)
+        time.sleep(Config().get('dm.stabilization_time', 0.001))
 
     #  Specific methods -------------------------------------------------------
 

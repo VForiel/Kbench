@@ -1,10 +1,10 @@
 # External imports
 import time
+import os
 
 # Internal imports
 from .. import serial
 from .config import Config
-config = Config()
 
 from ..utils import Singleton
 
@@ -19,11 +19,12 @@ class FilterWheel(metaclass=Singleton):
             - 5: ND?
             - 6: ND?
         """
+        config = Config()
         
         try:
-            # super().__init__(port) # This line is commented out as it's not in the original context
-            self.session = serial.Serial(config.filter_wheel.port, 115200, timeout=0.1) # Modified to use 'port' from config
-            print(f"Filter Wheel connected on port {config.filter_wheel.port}") # Modified to use 'port' from config
+            port = config.get('filter_wheel.port')
+            self.session = serial.Serial(port, 115200, timeout=0.1)
+            print(f"Filter Wheel connected on port {port}")
             self._connected = True
         except Exception as e:
             if not os.environ.get("PHOBOS_SANDBOX"):
@@ -34,7 +35,8 @@ class FilterWheel(metaclass=Singleton):
         """
         Reset the filter wheel to the default position defined in config.
         """
-        self.move(config.filter_wheel.selected_filter)
+        selected_filter = Config().get('filter_wheel.selected_filter', 1)
+        self.move(selected_filter)
         
     def _purge(self):
         """

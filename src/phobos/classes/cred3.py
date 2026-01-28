@@ -11,7 +11,7 @@ class Cred3(metaclass=Singleton):
     The camera writes frames to a shared memory location that can be read
     by this class. Optionally, dark frames can be subtracted.
     
-    Configuration is loaded from `phobos.config.cred3`.
+    Configuration is loaded from `phobos.config`.
     """
     _instance = None
     
@@ -35,26 +35,28 @@ class Cred3(metaclass=Singleton):
         
         # Load configuration
         import phobos
-        cfg = phobos.config.cred3
         
-        self.img_shm_path = cfg.img_shm_path
-        self.dark_shm_path = cfg.dark_shm_path
-        self.semid = cfg.semid
-        self.use_dark = cfg.use_dark
+        self.img_shm_path = phobos.config.get('cred3.img_shm_path')
+        self.dark_shm_path = phobos.config.get('cred3.dark_shm_path')
+        self.semid = phobos.config.get('cred3.semid', 0)
+        self.use_dark = phobos.config.get('cred3.use_dark', False)
         
         # Normalize output_centers
-        self.output_centers = np.array(cfg.output_centers) if cfg.output_centers else None
+        output_centers = phobos.config.get('cred3.output_centers')
+        self.output_centers = np.array(output_centers) if output_centers else None
             
         # Normalize output_sizes
-        if self.output_centers is not None and isinstance(cfg.output_sizes, (int, float)):
-             self.output_sizes = [cfg.output_sizes] * len(self.output_centers)
+        output_sizes = phobos.config.get('cred3.output_sizes')
+        if self.output_centers is not None and isinstance(output_sizes, (int, float)):
+             self.output_sizes = [output_sizes] * len(self.output_centers)
         else:
-             self.output_sizes = cfg.output_sizes
+             self.output_sizes = output_sizes
 
         # Normalize bulk_center
-        self.bulk_center = np.array(cfg.bulk_center) if cfg.bulk_center else None
+        bulk_center = phobos.config.get('cred3.bulk_center')
+        self.bulk_center = np.array(bulk_center) if bulk_center else None
             
-        self.bulk_size = cfg.bulk_size
+        self.bulk_size = phobos.config.get('cred3.bulk_size')
         
         # Initialize shared memory for camera
         self.cam = shm(self.img_shm_path, nosem=False)
@@ -188,7 +190,7 @@ class Cred3(metaclass=Singleton):
             List of cropped sub-images for each configured output.
         """
         if self.output_centers is None:
-            raise ValueError("output_centers not configured in phobos.config.cred3")
+            raise ValueError("output_centers not configured in phobos.config")
         
         return self._crop_regions(img, self.output_centers, self.output_sizes)
 
@@ -230,7 +232,7 @@ class Cred3(metaclass=Singleton):
         crop_sizes = self.output_sizes
         
         if crop_centers is None:
-            raise ValueError("output_centers not configured. Please set them in phobos.config.cred3.output_centers")
+            raise ValueError("output_centers not configured. Please set them in phobos.config")
             
         # Get the latest image
         img = self.get_image(subtract_dark=subtract_dark)
@@ -269,7 +271,7 @@ class Cred3(metaclass=Singleton):
         """
         # Use configured bulk values
         if self.bulk_center is None:
-            raise ValueError("bulk_center not configured in phobos.config.cred3")
+            raise ValueError("bulk_center not configured in phobos.config")
         
         crop_center = self.bulk_center
         crop_size = self.bulk_size
@@ -431,11 +433,10 @@ class Cred3(metaclass=Singleton):
         """
         Reset the camera settings (use_dark, outputs strategies) to the configuration.
         """
-        # Refresh configuration
+        # Reload configuration
         import phobos
-        cfg = phobos.config.cred3
         
-        self.use_dark = cfg.use_dark
+        self.use_dark = phobos.config.get('cred3.use_dark', False)
         # Re-apply dark mechanism
         if self.use_dark:
              if self.dark_shm_obj is None:
@@ -448,14 +449,17 @@ class Cred3(metaclass=Singleton):
              self.dark = None
              
         # Restore crop settings
-        self.output_centers = np.array(cfg.output_centers) if cfg.output_centers else None
+        output_centers = phobos.config.get('cred3.output_centers')
+        self.output_centers = np.array(output_centers) if output_centers else None
         
-        if self.output_centers is not None and isinstance(cfg.output_sizes, (int, float)):
-             self.output_sizes = [cfg.output_sizes] * len(self.output_centers)
+        output_sizes = phobos.config.get('cred3.output_sizes')
+        if self.output_centers is not None and isinstance(output_sizes, (int, float)):
+             self.output_sizes = [output_sizes] * len(self.output_centers)
         else:
-             self.output_sizes = cfg.output_sizes
+             self.output_sizes = output_sizes
              
-        self.bulk_center = np.array(cfg.bulk_center) if cfg.bulk_center else None
-        self.bulk_size = cfg.bulk_size
+        bulk_center = phobos.config.get('cred3.bulk_center')
+        self.bulk_center = np.array(bulk_center) if bulk_center else None
+        self.bulk_size = phobos.config.get('cred3.bulk_size')
         
         print("✅ Cred3 reset to configuration defaults.")

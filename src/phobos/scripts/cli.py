@@ -287,12 +287,8 @@ def control_config(args):
     command = args[0]
     
     if command == 'save':
+        # save() now snapshots hardware state AND saves to file
         phobos.config.save()
-        sys.exit(0)
-    
-    if command == 'update':
-        phobos.config.update()
-        # update() saves internally
         sys.exit(0)
         
     if command == 'apply':

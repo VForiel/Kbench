@@ -40,17 +40,16 @@ class PupilMask(metaclass=Singleton):
         """
         # Lazy import
         import phobos
-        cfg = phobos.config.pupil_mask
         
-        zaber_port = cfg.zaber_port
-        newport_port = cfg.newport_port
-        zaber_h_pos = getattr(cfg, 'zaber_h_pos', 0)
-        zaber_v_pos = getattr(cfg, 'zaber_v_pos', 0)
-        newport_home = cfg.newport_home
-        self.selected_mask = getattr(cfg, 'selected_mask', 4)
+        zaber_port = phobos.config.get('pupil_mask.zaber_port')
+        newport_port = phobos.config.get('pupil_mask.newport_port')
+        zaber_h_pos = phobos.config.get('pupil_mask.zaber_h_pos', 0)
+        zaber_v_pos = phobos.config.get('pupil_mask.zaber_v_pos', 0)
+        newport_home = phobos.config.get('pupil_mask.newport_home')
+        self.selected_mask = phobos.config.get('pupil_mask.selected_mask', 4)
         
         # Optional reset, default False if not in config
-        reset = getattr(cfg, 'reset', False)
+        reset = phobos.config.get('pupil_mask.reset', False)
 
         # Initialize the serial connections for Zaber and Newport
         zaber_session = serial.Serial(zaber_port, 115200, timeout=0.1)
@@ -258,13 +257,12 @@ class PupilMask(metaclass=Singleton):
         This method reloads the current 'pupil_mask' configuration settings 
         (newport_home, zaber_h_home, zaber_v_home) and moves the hardware accordingly.
         """
-        # Refresh configuration
+        # Reload configuration
         import phobos
-        cfg = phobos.config.pupil_mask
-        self.zaber_h_pos = getattr(cfg, 'zaber_h_pos', 0)
-        self.zaber_v_pos = getattr(cfg, 'zaber_v_pos', 0)
-        self.newport_home = cfg.newport_home
-        self.selected_mask = getattr(cfg, 'selected_mask', 4)
+        self.zaber_h_pos = phobos.config.get('pupil_mask.zaber_h_pos', 0)
+        self.zaber_v_pos = phobos.config.get('pupil_mask.zaber_v_pos', 0)
+        self.newport_home = phobos.config.get('pupil_mask.newport_home')
+        self.selected_mask = phobos.config.get('pupil_mask.selected_mask', 4)
 
         print(f"Resetting PupilMask: Mask={self.selected_mask}, ZH={self.zaber_h_pos}, ZV={self.zaber_v_pos}")
         

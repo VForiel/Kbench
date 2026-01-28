@@ -34,7 +34,7 @@ def get_chip() -> '_Arch':
     import phobos
     import importlib
     
-    arch_num = phobos.config.photonic_chip.arch
+    arch_num = phobos.config.get('photonic_chip.arch')
     
     # Import the specific architecture module
     # Assumes file naming convention: phobos.classes.archs.arch_N
@@ -820,8 +820,8 @@ class _Arch:
         save_dict = {
             # Global metadata
             'metadata_n_outputs': self.n_outputs,
-            'metadata_crop_centers': Config().cred3.output_centers,
-            'metadata_crop_sizes': Config().cred3.output_sizes,
+            'metadata_crop_centers': Config().get('cred3.output_centers'),
+            'metadata_crop_sizes': Config().get('cred3.output_sizes'),
             'metadata_n_averages': n_averages,
             'metadata_timestamp': timestamp,
             'metadata_arch_name': self.name,

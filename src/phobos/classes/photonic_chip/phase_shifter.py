@@ -12,7 +12,6 @@ from ... import SANDBOX_MODE
 from ... import serial
 from ..config import Config
 from .xpow import XPOW
-config = Config()
 
 MAX_VOLTAGE = 30  # V
 MAX_CURRENT = 300  # mA
@@ -92,7 +91,7 @@ class PhaseShifter:
         current = max(0, min(MAX_CURRENT, current))
         current_value = current * CUR_CONVERSION
         XPOW().send_command(f"CH:{self.channel}:CUR:{int(current_value)}", verbose=verbose, output=False)
-        time.sleep(config.photonic_chip.stabilization_time)
+        time.sleep(Config().get('photonic_chip.stabilization_time', 0.001))
         
     def set_voltage(self, voltage: float, verbose: bool = False) -> None:
         """
@@ -108,7 +107,7 @@ class PhaseShifter:
         voltage = max(0, min(MAX_VOLTAGE, voltage))
         voltage_value = voltage * VOLT_CONVERSION
         XPOW().send_command(f"CH:{self.channel}:VOLT:{int(voltage_value)}", verbose=verbose, output=False)
-        time.sleep(config.photonic_chip.stabilization_time)
+        time.sleep(Config().get('photonic_chip.stabilization_time', 0.001))
     
     def set_power(self, power: float, verbose: bool = False):
         """
@@ -158,7 +157,7 @@ class PhaseShifter:
         
         # Apply voltage
         self.set_voltage(voltage, verbose=verbose)
-        time.sleep(config.photonic_chip.stabilization_time)
+        time.sleep(Config().get('photonic_chip.stabilization_time', 0.001))
         
         if verbose:
             print(f"🔧 Channel {self.channel}: power={power:.3f} W → voltage={voltage:.3f} V @ 300 mA")

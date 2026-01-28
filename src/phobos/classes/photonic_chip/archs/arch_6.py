@@ -556,7 +556,7 @@ class Arch6(Arch, metaclass=Singleton):
         """
         
         # Get bright output from config
-        bright_output = Config().photonic_chip.bright_output
+        bright_output = Config().get('photonic_chip.bright_output', 0)
         
         # Initial step size
         ε = 1e-4 # Minimum shift step size in radians
@@ -1450,7 +1450,7 @@ class Arch6(Arch, metaclass=Singleton):
             if self.bright_output_index is None:
              import phobos
              config = phobos.config
-             bright_output_index = config.photonic_chip.bright_output
+             bright_output_index = config.get('photonic_chip.bright_output', 0)
              self.bright_output_index = bright_output_index
         
         bright_idx = bright_output_index
