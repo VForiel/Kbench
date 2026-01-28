@@ -7,6 +7,7 @@ from pathlib import Path
 from .. import bmc
 
 from ..utils import Singleton
+from .config import Config
 
 class DM(metaclass=Singleton):
     """
@@ -20,13 +21,11 @@ class DM(metaclass=Singleton):
         List of segments of the DM.
     """
 
-    from .config import Config
-
-
-    _default_config_path = Path(__file__).parent.parent.parent / "config" / "DM" / "DM_config.json"
+    DEFAULT_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "DM" / "DM_config.json"
+    N_SEGMENTS = 169
     _initialized = False
 
-    def __init__(self):
+    def __init__(self, config_path:str = DEFAULT_CONFIG_PATH):
         """
         Initialize the DM using global configuration.
         """
@@ -37,20 +36,10 @@ class DM(metaclass=Singleton):
             
         self._initialized = True
 
-        self.N_SEGMENTS = 169
-
         # Initialize the DM with the given serial number
         self.bmcdm = bmc.BmcDm()
         self.bmcdm.open_dm(Config().get('dm.serial_number'))
-        self.segments = [Segment(self, i) for i in range(self.N_SEGMENTS)]
-
-        # Set the initial configuration of the DM
-        try:
-            self.load_config(config_path)
-        except FileNotFoundError:
-            print(f"Config file not found: {config_path}. Reseting all segments to ptt = (0,0,0).")
-            for segment in self.segments:
-                segment.set_ptt(0, 0, 0)
+        self.segments = [Segment(i) for i in range(DM.N_SEGMENTS)]
 
         time.sleep(Config().get('dm.stabilization_time', 0.001))
 
@@ -106,12 +95,13 @@ class DM(metaclass=Singleton):
         Close the DM connection when the object is deleted.
         """
         self.bmcdm.close_dm()
-        print(f"DM with serial number {self._serial_number} closed.")
-        DM._all.remove(self)
+        for segment in self.segments:
+            del segment
+        print(f"DM with serial number {Config().get('dm.serial_number')} closed.")
 
     #Config -------------------------------------------------------------------
 
-    def save_config(self, path:str = _default_config_path) -> None:
+    def save_config(self, path:str = DEFAULT_CONFIG_PATH) -> None:
         """
         Save the current configuration of the DM.
 
@@ -138,7 +128,7 @@ class DM(metaclass=Singleton):
         
         print(f"Configuration saved to {path}")
 
-    def load_config(self, config_path:str = _default_config_path):
+    def load_config(self, config_path:str = DEFAULT_CONFIG_PATH):
         """
         Load the configuration of the DM from a JSON file.
 
@@ -191,7 +181,7 @@ class DM(metaclass=Singleton):
         # Parse segment indices
         if segments is None:
             # Turn off all injection segments
-            seg_indices = self._injection_segments
+            seg_indices = Config().get('dm.injection_segments')
         else:
             # Convert input number(s) (1-4) to segment indices
             if isinstance(segments, int):
@@ -199,9 +189,9 @@ class DM(metaclass=Singleton):
             
             seg_indices = []
             for seg_num in segments:
-                if not 1 <= seg_num <= len(self._injection_segments):
-                    raise ValueError(f"Segment number must be between 1 and {len(self._injection_segments)}, got {seg_num}")
-                seg_indices.append(self._injection_segments[seg_num - 1])
+                if not 1 <= seg_num <= len(Config().get('dm.injection_segments')):
+                    raise ValueError(f"Segment number must be between 1 and {len(Config().get('dm.injection_segments'))}, got {seg_num}")
+                seg_indices.append(Config().get('dm.injection_segments')[seg_num - 1])
         
         # Apply off position to selected segments
         for seg_idx in seg_indices:
@@ -238,7 +228,7 @@ class DM(metaclass=Singleton):
         # Parse segment indices
         if segments is None:
             # Optimize all injection segments
-            seg_indices = self._injection_segments
+            seg_indices = Config().get('dm.injection_segments')
         else:
             # Convert input number(s) (1-4) to segment indices
             if isinstance(segments, int):
@@ -246,9 +236,9 @@ class DM(metaclass=Singleton):
             
             seg_indices = []
             for seg_num in segments:
-                if not 1 <= seg_num <= len(self._injection_segments):
-                    raise ValueError(f"Segment number must be between 1 and {len(self._injection_segments)}, got {seg_num}")
-                seg_indices.append(self._injection_segments[seg_num - 1])
+                if not 1 <= seg_num <= len(Config().get('dm.injection_segments')):
+                    raise ValueError(f"Segment number must be between 1 and {len(Config().get('dm.injection_segments'))}, got {seg_num}")
+                seg_indices.append(Config().get('dm.injection_segments')[seg_num - 1])
         
         # Apply optimal position to selected segments
         for seg_idx in seg_indices:
@@ -284,18 +274,18 @@ class Segment():
 
     # Constructors ------------------------------------------------------------
 
-    def __new__(cls, channel: int, *args, **kwargs):
+    def __new__(cls, id: int, *args, **kwargs):
 
         # Check if channel is valid
-        if not (0 <= channel <= dm.N_SEGMENTS):
-             raise ValueError(f"❌ Invalid channel number {channel}. Must be between 1 and {dm.N_SEGMENTS}.")
+        if not (0 <= id <= DM.N_SEGMENTS):
+             raise ValueError(f"❌ Invalid channel number {id}. Must be between 1 and {DM.N_SEGMENTS}.")
              
         # Return cached instance if it exists
-        if channel not in cls._instances:
-            cls._instances[channel] = super(PhaseShifter, cls).__new__(cls)
+        if id not in cls._instances:
+            cls._instances[id] = super(Segment, cls).__new__(cls)
 
-        return cls._instances[channel]
-    
+        return cls._instances[id]
+
     def __init__(self, id:int):
         """
         Initialize the segment with the given DM and ID.
@@ -307,7 +297,7 @@ class Segment():
         """
 
         # If already initialized (from cache), skip
-        if hasattr(self, 'channel'):
+        if hasattr(self, 'id'):
             return
 
         self.id = id
@@ -332,8 +322,8 @@ class Segment():
             The response of the mirror.
         """
         self.piston = value
-        response = self.dm.bmcdm.set_segment(self.id, value, self.tip, self.tilt, True, True)
-        # time.sleep(0.01)  # Stabilization delay for BMC hardware
+        response = DM().bmcdm.set_segment(self.id, value, self.tip, self.tilt, True, True)
+        time.sleep(Config().get('dm.stabilization_time'))  # Stabilization delay for BMC hardware
         return response
     
     def get_piston(self) -> float:
@@ -356,7 +346,7 @@ class Segment():
         list[float]
             The piston range ([min, max]) of the segment in nm.
         """
-        return self.dm.bmcdm.get_segment_range(self.id, bmc.DM_Piston, self.piston, self.tip, self.tilt, True)
+        return DM().bmcdm.get_segment_range(self.id, bmc.DM_Piston, self.piston, self.tip, self.tilt, True)
 
     # tip ---------------------------------------------------------------------
 
@@ -376,7 +366,7 @@ class Segment():
         """
         self.tip = value / 1000.0
         response = dm.bmcdm.set_segment(self.id, self.piston, self.tip, self.tilt, True, True)
-        # time.sleep(0.01)  # Stabilization delay for BMC hardware
+        time.sleep(Config().get('dm.stabilization_time'))  # Stabilization delay for BMC hardware
         return response
 
     def get_tip(self) -> float:
@@ -399,7 +389,7 @@ class Segment():
         list[float]
             The tip range ([min, max]) of the segment in radians.
         """
-        return self.dm.bmcdm.get_segment_range(self.id, bmc.DM_XTilt, self.piston, self.tip, self.tilt, True)
+        return DM().bmcdm.get_segment_range(self.id, bmc.DM_XTilt, self.piston, self.tip, self.tilt, True)
 
     # tilt --------------------------------------------------------------------
 
@@ -418,8 +408,8 @@ class Segment():
             The response of the mirror.
         """
         self.tilt = value / 1000.0
-        response = self.dm.bmcdm.set_segment(self.id, self.piston, self.tip, value, True, True)
-        # time.sleep(0.01)  # Stabilization delay for BMC hardware
+        response = DM().bmcdm.set_segment(self.id, self.piston, self.tip, value, True, True)
+        time.sleep(Config().get('dm.stabilization_time'))  # Stabilization delay for BMC hardware
         return response
 
     def get_tilt(self) -> float:
@@ -442,7 +432,7 @@ class Segment():
         list[float]
             The tilt range ([min, max]) of the segment in radians.
         """
-        return self.dm.bmcdm.get_segment_range(self.id, bmc.DM_YTilt, self.piston, self.tip, self.tilt, True)
+        return DM().bmcdm.get_segment_range(self.id, bmc.DM_YTilt, self.piston, self.tip, self.tilt, True)
 
     # ptt ---------------------------------------------------------------------
 
@@ -473,8 +463,8 @@ class Segment():
         self.piston = piston
         self.tip = tip
         self.tilt = tilt
-        response = self.dm.bmcdm.set_segment(self.id, self.piston, self.tip, self.tilt, True, True)
-        # time.sleep(0.01)  # Stabilization delay for BMC hardware
+        response = DM().bmcdm.set_segment(self.id, self.piston, self.tip, self.tilt, True, True)
+        time.sleep(Config().get('dm.stabilization_time'))  # Stabilization delay for BMC hardware
         return response        
 
     def get_ptt(self) -> tuple[float, float, float]:
