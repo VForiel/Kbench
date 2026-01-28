@@ -9,15 +9,21 @@ except ImportError:
     print("❌ Error: phobos module not found.")
     sys.exit(1)
 
+REPO_BENCH_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'config', 'bench.yml'))
+
 CONFIG_FILE = os.path.expanduser("~/.phobos.json")
 OLD_CONFIG_FILE = os.path.expanduser("~/.kbch.json")
 
-if os.path.isfile(CONFIG_FILE):
-    with open(CONFIG_FILE, "r") as f:
-        CONFIG = json.load(f)
+# Prefer the repository-installed bench.yml as the primary configuration file.
+# Fall back to legacy per-user config files if the repo config is missing.
+if os.path.isfile(REPO_BENCH_FILE):
+    CONFIG = {'config_path': REPO_BENCH_FILE}
 elif os.path.isfile(OLD_CONFIG_FILE):
     print("⚠️  Using legacy configuration file ~/.kbch.json. Please rename it to ~/.phobos.json")
     with open(OLD_CONFIG_FILE, "r") as f:
+        CONFIG = json.load(f)
+elif os.path.isfile(CONFIG_FILE):
+    with open(CONFIG_FILE, "r") as f:
         CONFIG = json.load(f)
 else:
     CONFIG = {}
