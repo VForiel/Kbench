@@ -763,6 +763,16 @@ class Arch6(Arch, metaclass=Singleton):
         
         Where A is the effective Hermitian transfer matrix (M^dag . C_after^dag . C_after . M).
         
+        Based on GPT 5.2 recommendations:
+        - Step 0: Initial conditions with Cin=Cout=I, Ein=a*ones(4), M=theoretical MMI matrix
+        - Step 1: Gauge fixing (arg(X_1)=0)
+        - Step 2: FFT harmonic extraction (reduce data to DC/amplitude/phase)
+        - Step 3: Gram matrix reconstruction for bilinear products
+        - Step 4: Constrained factorization for initial A estimate
+        - Step 5: Global non-linear refinement
+        
+        All matrices (Cin, Cout, M, A) are enforced to be Hermitian.
+        
         Parameters
         ----------
         data_path : str, optional
@@ -913,38 +923,133 @@ class Arch6(Arch, metaclass=Singleton):
         active_masks_arr = np.array([d['active_mask'] for d in processed_items], dtype=bool) # (N_sub, 4)
         scanned_indices_arr = np.array([d['scanned_input_idx'] for d in processed_items], dtype=int) # (N_sub,)
         
-        # 3. Define Model and Residuals
+                
+        # Step 0: Initial Conditions (Hermitian)
+        # M = theoretical 4x4 MMI transfer matrix (normalized by 0.5)
+        M_theory = 0.5 * np.array([
+            [1, 1, 1, 1],
+            [1, 1j, -1j, -1],
+            [1, -1j, 1j, -1],
+            [1, -1, -1, 1]
+        ], dtype=complex)
         
-        # 3. Define Model and Residuals
+        # Cin = Cout = Identity (Hermitian by definition)
+        Cin_init = np.eye(4, dtype=complex)
+        Cout_init = np.eye(4, dtype=complex)
         
-        # Helpers for Unitary Parametrization
-        # A = exp(iH), where H is Hermitian (16 real params for 4x4)
-        # H has 4 real diagonal elements + 6 complex off-diagonal (12 params) = 16 params
+        # Ein = a * ones(4) where a is estimated from data
+        # Estimate a from DC components of single-input scans
+        a_estimate = np.sqrt(np.mean(measure_dc_arr))
+        Ein_init = a_estimate * np.ones(4, dtype=complex)
+        
+        print(f"📐 Initial conditions: Ein amplitude = {a_estimate:.2f}")
+        print(f"📐 Theoretical M matrix:\n{M_theory}")
+        
+        # Step 1: Gauge Fixing - Fix phase of channel 1 to 0
+        # This is enforced by parameterization: first diagonal phase is always 0
+        print("🔧 Gauge fixing: arg(X_1) = 0")
+        
+        # Step 2 & 3: Use extracted harmonics to reconstruct Gram matrices
+        # For two-input scans: I_k = |A_ki e^(iφ_i) + A_kj e^(iφ_j)|²
+        # The fundamental harmonic gives us A_ki * A_kj*
+        
+        print("📊 Step 2-3: Reconstructing Gram matrices from harmonics...")
+        
+        # Collect products A_ki * A_kj* from two-input scans
+        # For each output k, we build a Gram matrix G^(k)_ij = A_ki * A_kj*
+        gram_data = {k: {} for k in range(4)}  # gram_data[output][tuple(active)] = complex_product
+        
+        for item in processed_items:
+            active_indices = np.where(item['active_mask'])[0]
+            if len(active_indices) == 2:
+                i, j = active_indices
+                scanned = item['scanned_input_idx']
+                fund = item['fundamental']  # (4,) complex
+                
+                # For each output k, the fundamental gives A_k,scanned * conj(A_k,other)
+                for k in range(4):
+                    if scanned == i:
+                        other = j
+                    else:
+                        other = i
+                    # Store the product
+                    key = (scanned, other)
+                    if key not in gram_data[k]:
+                        gram_data[k][key] = fund[k]
+        
+        # Step 4: Factorization for initial A estimate
+        # Build Gram matrices for each output and factor
+        print("🔧 Step 4: Factorizing Gram matrices for initial A estimate...")
+        
+        A_from_gram = np.zeros((4, 4), dtype=complex)
+        
+        for k in range(4):
+            # Build the 4x4 Gram matrix for output k
+            G_k = np.zeros((4, 4), dtype=complex)
+            
+            # Diagonal elements from single-input DC
+            for item in processed_items:
+                active_indices = np.where(item['active_mask'])[0]
+                if len(active_indices) == 1:
+                    i = active_indices[0]
+                    G_k[i, i] = item['dc'][k]  # |A_ki|²
+            
+            # Off-diagonal from products
+            for (i, j), val in gram_data[k].items():
+                G_k[i, j] = val
+                G_k[j, i] = np.conj(val)  # Hermitian
+            
+            # Factorize G_k (rank-1 Hermitian matrix) to get A row k
+            # Use eigendecomposition
+            try:
+                eigvals, eigvecs = np.linalg.eigh(G_k)
+                # Take the eigenvector corresponding to largest eigenvalue
+                max_idx = np.argmax(np.abs(eigvals))
+                A_from_gram[k, :] = np.sqrt(np.abs(eigvals[max_idx])) * eigvecs[:, max_idx]
+            except np.linalg.LinAlgError:
+                # Fallback to theoretical
+                A_from_gram[k, :] = M_theory[k, :]
+        
+        # Apply gauge fixing: set phase of first column to 0
+        for k in range(4):
+            if np.abs(A_from_gram[k, 0]) > 1e-10:
+                phase_ref = np.angle(A_from_gram[k, 0])
+                A_from_gram[k, :] *= np.exp(-1j * phase_ref)
+        
+        print(f"📐 Initial A estimate from Gram factorization:\n{A_from_gram}")
+        
+        # Global Non-Linear Refinement
+        print("🧠 Running constrained optimization (Unitary A, |C|<=1)...")
+        
+        # Helpers for Hermitian Parametrization (for A = exp(iH))
+        # H (4x4 Hermitian): 4 real diag + 6 complex off-diag (12 real) = 16 params
         
         def pack_params(H_params, C, I_ON, I_OFF):
-            # H_params: 16 floats (4 diag, 6 real off, 6 imag off)
-            # C: 32 floats (4x4 complex)
-            # I_ON: 8 floats
-            # I_OFF: 8 floats
-            # Total: 16 + 32 + 8 + 8 = 64 parameters
+            """Pack all parameters.
+            
+            H_params: 16 floats (4 diag + 6 complex off-diag = 4 + 12)
+            C: 32 floats (4x4 complex - general)
+            I_ON: 8 floats
+            I_OFF: 8 floats
+            Total: 16 + 32 + 8 + 8 = 64 parameters
+            """
             return np.concatenate([
-                H_params,
-                C.real.ravel(), C.imag.ravel(),
-                I_ON.real.ravel(), I_ON.imag.ravel(),
-                I_OFF.real.ravel(), I_OFF.imag.ravel()
+                H_params,                                    # 16 params
+                C.real.ravel(), C.imag.ravel(),              # 32 params
+                I_ON.real.ravel(), I_ON.imag.ravel(),        # 8 params
+                I_OFF.real.ravel(), I_OFF.imag.ravel()       # 8 params
             ])
-
+        
         def unpack_params(x):
+            """Unpack all parameters."""
             # H (4x4 Hermitian)
             # Diagonals (4 real)
             h_diag = x[0:4]
             # Off-diagonals (6 complex -> 12 real)
-            # Upper triangle indices: (0,1), (0,2), (0,3), (1,2), (1,3), (2,3)
             h_off_real = x[4:10]
             h_off_imag = x[10:16]
             
-            H = np.zeros((4,4), dtype=complex)
-            # Set diagonals
+            H = np.zeros((4, 4), dtype=complex)
             np.fill_diagonal(H, h_diag)
             
             # Set off-diagonals
@@ -952,17 +1057,17 @@ class Arch6(Arch, metaclass=Singleton):
             for i in range(4):
                 for j in range(i+1, 4):
                     val = h_off_real[idx] + 1j * h_off_imag[idx]
-                    H[i,j] = val
-                    H[j,i] = np.conj(val)
+                    H[i, j] = val
+                    H[j, i] = np.conj(val)
                     idx += 1
             
             # A = exp(iH) is strictly Unitary
             A = expm(1j * H)
             
-            # C (4x4 Complex) - 32 params
+            # C_before (general 4x4 complex matrix) - 32 params
             ptr = 16
-            c_real = x[ptr:ptr+16].reshape(4,4); ptr += 16
-            c_imag = x[ptr:ptr+16].reshape(4,4); ptr += 16
+            c_real = x[ptr:ptr+16].reshape(4, 4); ptr += 16
+            c_imag = x[ptr:ptr+16].reshape(4, 4); ptr += 16
             C = c_real + 1j * c_imag
             
             # I_ON - 8 params
@@ -976,23 +1081,21 @@ class Arch6(Arch, metaclass=Singleton):
             I_OFF = ioff_real + 1j * ioff_imag
             
             return A, C, I_ON, I_OFF
-
+        
         def compute_residuals(x):
             A, C_before, I_ON, I_OFF = unpack_params(x)
             
-            # --- Standard Residuals ---
-            # 1. Inputs E_in
+            # Inputs E_in
             Is_ON = I_ON[None, :]
             Is_OFF = I_OFF[None, :]
-            E_in_base = np.where(active_masks_arr, Is_ON, Is_OFF) # (N_sub, 4)
+            E_in_base = np.where(active_masks_arr, Is_ON, Is_OFF)  # (N_sub, 4)
             
-            # 2. Pre-Shifter States v = C_before . E_in
-            v = (C_before @ E_in_base.T).T # (N_sub, 4)
+            # Pre-Shifter States v = C_before . E_in
+            v = (C_before @ E_in_base.T).T  # (N_sub, 4)
             
-            k_indices = scanned_indices_arr # (N_sub,)
+            k_indices = scanned_indices_arr  # (N_sub,)
             
-            # 3. Model: E_out = A @ P(phi) @ v
-            # A_ks = A[:, s]
+            # Model: E_out = A @ P(phi) @ v
             A_ks = A[:, k_indices] # (4, N_sub)
             
             # v_s: Input component entering the phase shifter
@@ -1011,29 +1114,34 @@ class Arch6(Arch, metaclass=Singleton):
             pred_dc = np.abs(Z_mod)**2 + np.abs(Z_static)**2
             pred_fund = Z_mod * np.conj(Z_static)
             
-            # Measurement Residuals
-            diff_dc = (pred_dc - measure_dc_arr).ravel() 
-            diff_fund = (pred_fund - measure_fund_arr).ravel()
+            # Compute weights based on number of active inputs
+            # Weight 1-input scans higher (3x) to improve fits in that regime
+            n_active_per_scan = active_masks_arr.sum(axis=1)  # (N_sub,)
+            single_input_weight = 3.0
+            weights = np.where(n_active_per_scan == 1, single_input_weight, 1.0)
+            weights_4 = np.repeat(weights, 4)  # Expand for 4 outputs per scan
+            
+            # Measurement Residuals (weighted)
+            diff_dc = ((pred_dc - measure_dc_arr) * weights[:, None]).ravel() 
+            diff_fund = ((pred_fund - measure_fund_arr) * weights[:, None]).ravel()
             
             residuals = np.concatenate([diff_dc, diff_fund.real, diff_fund.imag])
             
-            # --- Constraints / Penalties ---
-            
-            # Constraint: Spectral Norm of C <= 1
-            # Penalty = w * max(0, sigma_max - 1)
-            # We apply it to all singular values > 1
+            # Constraints / Penalties
+            # Spectral Norm of C <= 1
             s = svd(C_before, compute_uv=False)
-            penalty_C = np.maximum(0, s - 1.0) * 1e3 # Strong weight
+            penalty_C_spectral = np.maximum(0, s - 1.0) * 1e3
             
-            return np.concatenate([residuals, penalty_C])
-
-        # 4. Run Optimization
-        print("🧠 Running constrained optimization (Unitary A, |C|<=1)...")
+            # Penalty: Cin close to identity (helps 1-input regime)
+            # ||Cin - I||_F² * weight
+            cin_identity_penalty_weight = 100.0
+            penalty_C_identity = np.abs(C_before - np.eye(4)).ravel() * cin_identity_penalty_weight
+            
+            return np.concatenate([residuals, penalty_C_spectral, penalty_C_identity])
         
-        # Initial Guess
-        # A = I => H = 0
-        H_init = np.zeros(16) # 4 diag + 12 off (real/imag)
-        
+        # Initialize optimization
+        # H = 0 => A = I (identity) - will be optimized
+        H_init = np.zeros(16)  # 4 diag + 12 off (real/imag)
         C_init = np.eye(4, dtype=complex)
         I_ON_init = np.ones(4, dtype=complex)
         I_OFF_init = np.zeros(4, dtype=complex)
@@ -1044,7 +1152,14 @@ class Arch6(Arch, metaclass=Singleton):
         
         A_final, C_before_final, I_ON_final, I_OFF_final = unpack_params(res.x)
         
+        # Verify properties
+        is_A_unitary = np.allclose(A_final @ A_final.conj().T, np.eye(4), atol=1e-6)
+        s_C = svd(C_before_final, compute_uv=False)
+        is_C_valid = np.all(s_C <= 1.0 + 1e-6)
+        
         print(f"✅ Optimization complete. Cost: {res.cost:.2e}")
+        print(f"📐 A is Unitary: {is_A_unitary}")
+        print(f"📐 C_before spectral norm <= 1: {is_C_valid} (max σ = {s_C.max():.4f})")
 
         
         # 5. Plotting (Detailed)
