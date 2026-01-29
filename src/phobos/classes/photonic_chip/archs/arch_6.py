@@ -1130,14 +1130,9 @@ class Arch6(Arch, metaclass=Singleton):
             # Constraints / Penalties
             # Spectral Norm of C <= 1
             s = svd(C_before, compute_uv=False)
-            penalty_C_spectral = np.maximum(0, s - 1.0) * 1e3
+            penalty_C = np.maximum(0, s - 1.0) * 1e3
             
-            # Penalty: Cin close to identity (helps 1-input regime)
-            # ||Cin - I||_F² * weight
-            cin_identity_penalty_weight = 100.0
-            penalty_C_identity = np.abs(C_before - np.eye(4)).ravel() * cin_identity_penalty_weight
-            
-            return np.concatenate([residuals, penalty_C_spectral, penalty_C_identity])
+            return np.concatenate([residuals, penalty_C])
         
         # Initialize optimization
         # H = 0 => A = I (identity) - will be optimized
