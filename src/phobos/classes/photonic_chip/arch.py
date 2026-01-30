@@ -812,10 +812,7 @@ class _Arch:
         # Turn everything off at the end
         self.turn_off(verbose=False)
         DM().flat()  # Restore all inputs
-        
-        # Save consolidated archive
-        archive_file = os.path.join(base_dir, "characterization_data.npz")
-        
+    
         # Prepare data for saving: flatten nested dict structure
         save_dict = {
             # Global metadata
@@ -834,20 +831,22 @@ class _Arch:
             for data_key, data_value in scan_data.items():
                 save_dict[f"{scan_key}_{data_key}"] = data_value
         
-        np.savez(archive_file, **save_dict)
+        from ...utils import archive
+        path = archive.new("MMI Characterization") / "data.npz"
+        np.savez(path, **save_dict)
         
         if verbose:
             print(f"\n✅ Characterization complete!")
             print(f"   Total scans: {scan_count}")
-            print(f"   Consolidated archive: {archive_file}")
+            print(f"   Consolidated archive: {path}")
         
         # Automatically plot results if requested
         if plot:
             if verbose:
                 print(f"\n📊 Generating plots...")
-            self.plot_characterization(archive_file)
+            self.plot_characterization(path)
         
-        return archive_file
+        return path
 
     @staticmethod
     def plot_characterization(archive_path, output_dir=None):

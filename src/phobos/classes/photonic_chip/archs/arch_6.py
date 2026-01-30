@@ -1,4 +1,5 @@
 # External imports
+import os
 import numpy as np
 import scipy.optimize
 import matplotlib.pyplot as plt
@@ -148,7 +149,7 @@ class Arch6(Arch, metaclass=Singleton):
         plot: bool = True,
         calibrated: bool = False,
         relative: bool = True
-    ) -> np.ndarray:
+    ) -> dict:
         """
         Return the complex phasors at the output, separated by input contribution.
         Mimics predict_output but returns (4, 4) complex array.
@@ -171,9 +172,10 @@ class Arch6(Arch, metaclass=Singleton):
         
         Returns
         -------
-        np.ndarray
-            Complex phasors array of shape (4, 4).
-            output[i, j] is the contribution of Input j to Output i.
+        dict
+            Dictionary with keys:
+            - ``phasors``: complex array of shape (4, 4)
+            - ``figure``: matplotlib Figure if ``plot=True``, else None
         """
         # 0. Handle Default Inputs
         if input_fields is None:
@@ -222,6 +224,7 @@ class Arch6(Arch, metaclass=Singleton):
             # Store in column j (Output i, Input j)
             phasors[:, j] = E_out_j
             
+        fig = None
         if plot:
             import matplotlib.pyplot as plt
             fig, axes = plt.subplots(1, 4, subplot_kw={'projection': 'polar'}, figsize=(20, 5))
@@ -291,7 +294,7 @@ class Arch6(Arch, metaclass=Singleton):
             plt.tight_layout()
             plt.show()
 
-        return phasors
+        return {"phasors": phasors, "figure": fig}
 
     def verify_model(self, data_path=False, save_as=None):
         """
@@ -516,7 +519,6 @@ class Arch6(Arch, metaclass=Singleton):
         plot: bool = False,
         figsize: tuple = (10, 10),
         save_as=None,
-        return_history: bool = False
     ) -> dict:
         """
         Optimize phase shifter offsets to maximize nulling performance (minimize Null-Depth).
@@ -538,13 +540,14 @@ class Arch6(Arch, metaclass=Singleton):
             Figure size for plots. Default is (10, 10).
         save_as : str, optional
             Path to save the plot.
-        return_history : bool, optional
-            If True, returns optimization history. Default is False.
-            
         Returns
         -------
-        np.ndarray
-            Optimized phase offsets (radians).
+        dict
+            Dictionary with keys:
+            - ``phases``: optimized phase offsets (radians)
+            - ``phases_evol``: phase evolution over iterations (shape: n_steps x 4)
+            - ``depth_evol``: metric evolution over iterations (shape: n_steps,)
+            - ``figure``: matplotlib Figure if ``plot=True``, else None
         
         Notes
         -----
@@ -588,7 +591,11 @@ class Arch6(Arch, metaclass=Singleton):
             metric = max_null / b
 
             return metric
-            
+
+        import time
+
+        t_start = time.perf_counter()
+
         print("🧬 Starting Genetic Calibration for Arch6...")
         
         iteration_count = 0
@@ -646,18 +653,21 @@ class Arch6(Arch, metaclass=Singleton):
             Δφ *= beta
             iteration_count += 1
             
+        elapsed_s = time.perf_counter() - t_start
+
         print(f"✅ Genetic calibration complete in {iteration_count} iterations.")
         
+        fig = None
         if plot and plt is not None:
             shifters_hist_arr = np.array(shifters_history)
-            
-            _, axs = plt.subplots(2, 1, figsize=figsize)
+
+            fig, axs = plt.subplots(2, 1, figsize=figsize)
             
             axs[0].plot(depth_history)
             axs[0].set_xlabel("Steps")
             axs[0].set_ylabel("Mean Null-Depth")
             axs[0].set_yscale("log")
-            axs[0].set_title("Performance of the Nuller")
+            axs[0].set_title(f"Performance of the Nuller (t={elapsed_s:.2f}s)")
             
             for i in range(shifters_hist_arr.shape[1]):
                 axs[1].plot(shifters_hist_arr[:, i], label=f"Ch {self.shifters[i].channel}")
@@ -671,13 +681,12 @@ class Arch6(Arch, metaclass=Singleton):
                 plt.savefig(save_as, dpi=150, bbox_inches='tight')
             plt.show()
 
-        if return_history:
-            return np.array(current_phases), {
-                "depth": np.array(depth_history),
-                "shifters": np.array(shifters_history)
-            }
-        else:
-            return np.array(current_phases)
+        return {
+            "phases": np.array(current_phases),
+            "phases_evol": np.array(shifters_history),
+            "depth_evol": np.array(depth_history),
+            "figure": fig,
+        }
 
     def predict_null_calibration_gen(
         self,
@@ -1158,6 +1167,8 @@ class Arch6(Arch, metaclass=Singleton):
 
         
         # 5. Plotting (Detailed)
+        fig = None
+        figures = []
         if plot and plt is not None:
             A, C_before, I_ON, I_OFF = A_final, C_before_final, I_ON_final, I_OFF_final
             
@@ -1237,6 +1248,8 @@ class Arch6(Arch, metaclass=Singleton):
                     fig.savefig(f"{base}_N{n_inputs}{ext}", dpi=150, bbox_inches='tight')
                 plt.show()
 
+                figures.append(fig)
+
         self.A_model = A_final
         self.C_model = C_before_final
         self.Eon_model = I_ON_final
@@ -1247,7 +1260,8 @@ class Arch6(Arch, metaclass=Singleton):
             'C_before': C_before_final,
             'I_ON': I_ON_final,
             'I_OFF': I_OFF_final,
-            'cost': res.cost
+            'cost': res.cost,
+            'figures': figures,
         }
 
     def abcd_fringe_tracking(

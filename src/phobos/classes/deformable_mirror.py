@@ -418,7 +418,7 @@ class DM(metaclass=Singleton):
         piston_nm: float = -1150.0,
         verbose: bool = False,
         use_tqdm: bool = True,
-    ) -> Dict[str, Dict[str, List[float]]]:
+    ) -> Dict[str, object]:
         """Calibrate injection tip/tilt settings.
 
         This routine calibrates tip/tilt for all injection segments defined in
@@ -729,6 +729,7 @@ class DM(metaclass=Singleton):
             if verbose:
                 print(f"[calibrate_injection] seg={seg_idx}: balanced on ray to match ref_flux={ref_flux:.3g} -> (tip,tilt)=({tip_b:.3f},{tilt_b:.3f}) mrad; flux_bal={flux_b:.3g}")
 
+        fig = None
         if plot:
             try:
                 import matplotlib.pyplot as plt
@@ -799,7 +800,7 @@ class DM(metaclass=Singleton):
         phobos.config.save_to_file()
 
         print("✅ Injection calibration saved to config under dm.ptt_max and dm.ptt_balanced")
-        return {'max': max_ptt, 'balanced': balanced_ptt}
+        return {'max': max_ptt, 'balanced': balanced_ptt, 'figure': fig}
 
     def balanced(self, segments=None):
         """Apply stored 'balanced' injection calibration (tip/tilt) for selected segments.
