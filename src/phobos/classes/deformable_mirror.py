@@ -374,8 +374,8 @@ class DM(metaclass=Singleton):
 
         return best_tip, best_tilt, best_flux, (flux_map if plot else None)
     
-    def flat(self, segments=None):
-        """Reset specified injection segments to flat (piston=0, tip=0, tilt=0).
+    def zero(self, segments=None):
+        """Reset specified injection segments to zero (piston=0, tip=0, tilt=0).
         
         This returns the segments to their nominal position for maximum light coupling.
         
@@ -391,20 +391,51 @@ class DM(metaclass=Singleton):
         Examples
         --------
         >>> dm = DM()
-    >>> dm.flat(1)          # Flatten first injection input
-    >>> dm.flat([1, 3])     # Flatten inputs 1 and 3
-    >>> dm.flat()           # Flatten all injection inputs
-        
-        Notes
-        -----
-    The flat position is: piston=0 nm, tip=0 mrad, tilt=0 mrad
+        >>> dm.zero(1)          # Flatten first injection input
+        >>> dm.zero([1, 3])     # Flatten inputs 1 and 3
+        >>> dm.zero()           # Flatten all injection inputs
         """
         seg_indices = self._parse_injection_segments(segments)
         
         # Apply flat position to selected segments
         for seg_idx in seg_indices:
             self.segments[seg_idx].set_ptt(0, 0, 0)
+
+        print(f"Flattened injection segments: {seg_indices}")
+
+    def flat(self, segments=None):
+        """Reset specified injection segments to flat (piston=mean piston, tip=0, tilt=0).
         
+        This returns the segments to their nominal position for maximum light coupling.
+        
+        Parameters
+        ----------
+        segments : int, array-like, or None, optional
+            Segment input number(s) to optimize (1-4 for the 4 injection inputs).
+            - If int: single input number (e.g., 1 for first injection segment)
+            - If array-like: multiple input numbers (e.g., [1, 2, 4])
+            - If None: optimizes all injection segments
+            Default is None.
+        
+        Examples
+        --------
+        >>> dm = DM()
+        >>> dm.flat(1)          # Flatten first injection input
+        >>> dm.flat([1, 3])     # Flatten inputs 1 and 3
+        >>> dm.flat()           # Flatten all injection inputs
+        
+        Notes
+        -----
+        The flat position is: piston=0 nm, tip=0 mrad, tilt=0 mrad
+        """
+        seg_indices = self._parse_injection_segments(segments)
+
+        mean_piston = np.mean(Config().get('dm.injection_piston_nm'))
+        
+        # Apply flat position to selected segments
+        for seg_idx in seg_indices:
+            self.segments[seg_idx].set_ptt(mean_piston, 0, 0)
+
         print(f"Flattened injection segments: {seg_indices}")
 
     def max(self, segments=None):
