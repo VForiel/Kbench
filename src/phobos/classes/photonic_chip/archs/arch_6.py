@@ -521,6 +521,8 @@ class Arch6(Arch, metaclass=Singleton):
         save_as=None,
         use_dm: bool = False,
         lam: float = 1550.0,
+        n_measures: int = 1,
+        aggregate_method = np.median,
     ) -> dict:
         """
         Optimize phase shifter offsets to maximize nulling performance (minimize Null-Depth).
@@ -548,6 +550,12 @@ class Arch6(Arch, metaclass=Singleton):
         lam : float, optional
             Wavelength in nanometers used to convert phase steps to piston (nm)
             when ``use_dm=True``. Default is 1550.
+        n_measures : int, optional
+            Number of camera measurements to take for each metric evaluation.
+            The outputs are aggregated before comparing the three states
+            (negative / current / positive). Default is 1.
+        aggregate_method : Callable[[np.ndarray], np.ndarray], optional
+            Aggregation method for repeated measurements. Default is np.median.
         Returns
         -------
         dict
@@ -577,6 +585,11 @@ class Arch6(Arch, metaclass=Singleton):
         if bright_output is None:
             bright_output = Config().get('photonic_chip.bright_output', 0)
         
+        # Validate n_measures
+        n = int(n_measures)
+        if n < 1:
+            raise ValueError("n_measures must be >= 1")
+        
         # Initial step size
         ε = 1e-4 # Minimum shift step size in radians
         Δφ = np.pi / 2 # Initial step
@@ -585,6 +598,11 @@ class Arch6(Arch, metaclass=Singleton):
         # segments as actuators when use_dm is True.
         if use_dm:
             dm_segments_list = Config().get('dm.injection_segments')
+
+            if dm_segments_list is None or len(dm_segments_list) < len(self.shifters):
+                raise ValueError(
+                    "Config key 'dm.injection_segments' must provide at least 4 DM segment indices when use_dm=True"
+                )
 
             shifter_indices = range(len(self.shifters))
         else:
@@ -596,26 +614,32 @@ class Arch6(Arch, metaclass=Singleton):
 
         # Cache current actuator states to avoid repeated hardware calls
         if use_dm:
-            # Current piston in nm for each mapped segment
-            current_phases = []
-            for seg_id in dm_segments_list[:len(self.shifters)]:
-                current_phases.append(DM().segments[seg_id].get_piston())
+            # Track commanded phases (radians); Segment.set_phase() maps them to pistons (nm).
+            current_phases = [0.0 for _ in range(len(self.shifters))]
         else:
             # Phase shifters: radians
             current_phases = [shifter.get_phase() for shifter in self.shifters]
-        
-        def get_metric():
-            outs = np.abs(Cred3().get_outputs(flux_mode='sum'))
-            
+
+        def get_metric() -> float:
+
+            outs_list = []
+            for _ in range(n):
+                outs_list.append(Cred3().get_outputs(flux_mode='sum'))
+            outs_stack = np.array(outs_list)
+
+            # Aggregate outputs over measurements
+            outs = aggregate_method(outs_stack, axis=0)
+            outs[outs < 1e-10] = 1e-10  # Filter negative value (noise) and zeros
+
             b = outs[bright_output]
+
             # Remove bright output from outs
-            outs = np.delete(outs, int(bright_output))
+            outs_wo_bright = np.delete(outs, int(bright_output))
 
-            max_null = np.max(outs)
-
-            metric = max_null / b
-
-            return metric
+            max_null = float(np.max(outs_wo_bright))
+            if b <= 0:
+                return float('inf')
+            return max_null / b
 
         import time
 
@@ -641,21 +665,18 @@ class Arch6(Arch, metaclass=Singleton):
                 current_phase = current_phases[i]
 
                 if use_dm:
-                    # Convert angular step to piston (nm)
-                    lam_nm = float(lam)
-                    delta_piston_nm = (Δφ / (2 * np.pi)) * lam_nm
-
                     seg_id = dm_segments_list[i]
-                    # Positive step
-                    DM().segments[seg_id].set_piston(current_phase + delta_piston_nm)
+
+                    # Positive step in phase
+                    DM().segments[seg_id].set_phase(current_phase + Δφ, lam=lam)
                     m_pos = get_metric()
 
-                    # Negative step
-                    DM().segments[seg_id].set_piston(current_phase - delta_piston_nm)
+                    # Negative step in phase
+                    DM().segments[seg_id].set_phase(current_phase - Δφ, lam=lam)
                     m_neg = get_metric()
 
-                    # Restore original piston
-                    DM().segments[seg_id].set_piston(current_phase)
+                    # Restore original phase
+                    DM().segments[seg_id].set_phase(current_phase, lam=lam)
                 else:
                     # Positive step (phase shifter)
                     shifter.set_phase((current_phase + Δφ) % (2 * np.pi))
@@ -678,10 +699,9 @@ class Arch6(Arch, metaclass=Singleton):
                 if m_pos < m_old and m_pos < m_neg:
                     log += " + "
                     if use_dm:
-                        delta_piston_nm = (Δφ / (2 * np.pi)) * float(lam)
                         seg_id = dm_segments_list[i]
-                        DM().segments[seg_id].set_piston(current_phase + delta_piston_nm)
-                        current_phases[i] = DM().segments[seg_id].get_piston()
+                        current_phases[i] = float((current_phase + Δφ) % (2 * np.pi))
+                        DM().segments[seg_id].set_phase(current_phases[i], lam=lam)
                     else:
                         new_phase = (current_phase + Δφ) % (2 * np.pi)
                         shifter.set_phase(new_phase)
@@ -689,10 +709,9 @@ class Arch6(Arch, metaclass=Singleton):
                 elif m_neg < m_old and m_neg < m_pos:
                     log += " - "
                     if use_dm:
-                        delta_piston_nm = (Δφ / (2 * np.pi)) * float(lam)
                         seg_id = dm_segments_list[i]
-                        DM().segments[seg_id].set_piston(current_phase - delta_piston_nm)
-                        current_phases[i] = DM().segments[seg_id].get_piston()
+                        current_phases[i] = float((current_phase - Δφ) % (2 * np.pi))
+                        DM().segments[seg_id].set_phase(current_phases[i], lam=lam)
                     else:
                         new_phase = (current_phase - Δφ) % (2 * np.pi)
                         shifter.set_phase(new_phase)
@@ -718,17 +737,40 @@ class Arch6(Arch, metaclass=Singleton):
             fig, axs = plt.subplots(2, 1, figsize=figsize)
             
             axs[0].plot(depth_history)
+
+            # Show mean null-depth over the last 10 steps (robust convergence indicator)
+            if len(depth_history) >= 1:
+                last_n = min(10, len(depth_history))
+                tail_mean = float(np.mean(depth_history[-last_n:]))
+                axs[0].axhline(
+                    tail_mean,
+                    color='k',
+                    linestyle='--',
+                    linewidth=1.5,
+                    alpha=0.8,
+                    label=f"Last {last_n} mean: {tail_mean:.2e}",
+                )
+                axs[0].legend(loc='best', fontsize='small')
+
             axs[0].set_xlabel("Steps")
             axs[0].set_ylabel("Mean Null-Depth")
             axs[0].set_yscale("log")
             axs[0].set_title(f"Performance of the Nuller (t={elapsed_s:.2f}s)")
             
             for i in range(shifters_hist_arr.shape[1]):
-                axs[1].plot(shifters_hist_arr[:, i], label=f"Ch {self.shifters[i].channel}")
+                if use_dm:
+                    seg_id = dm_segments_list[i]
+                    axs[1].plot(shifters_hist_arr[:, i], label=f"Seg {seg_id}")
+                else:
+                    axs[1].plot(shifters_hist_arr[:, i], label=f"Ch {self.shifters[i].channel}")
             
             axs[1].set_xlabel("Steps")
-            axs[1].set_ylabel("Phase shift (rad)")
-            axs[1].set_title("Convergence of phase shifters")
+            if use_dm:
+                axs[1].set_ylabel("Phase (rad)")
+                axs[1].set_title("Convergence of DM phases")
+            else:
+                axs[1].set_ylabel("Phase shift (rad)")
+                axs[1].set_title("Convergence of phase shifters")
             axs[1].legend(loc='upper right', bbox_to_anchor=(1,1), fontsize='small', ncol=2)
             
             if save_as:
@@ -742,11 +784,7 @@ class Arch6(Arch, metaclass=Singleton):
         }
 
         if use_dm:
-            # current_phases contains pistons in nm; also provide equivalent radians
-            pistons = np.array(current_phases)
-            lam_nm = float(lam)
-            phases_rad = (pistons / lam_nm) * (2 * np.pi)
-            result.update({"pistons_nm": pistons, "phases": phases_rad})
+            result.update({"phases": np.array(current_phases, dtype=float)})
         else:
             result.update({"phases": np.array(current_phases)})
 

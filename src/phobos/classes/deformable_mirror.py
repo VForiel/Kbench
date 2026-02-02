@@ -2,6 +2,7 @@ import numpy as np
 import os
 import json
 import time
+import warnings
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
@@ -947,6 +948,64 @@ class Segment():
         response = DM().bmcdm.set_segment(self.id, value, self.tip, self.tilt, True, True)
         time.sleep(Config().get('dm.stabilization_time'))  # Stabilization delay for BMC hardware
         return response
+
+    def set_phase(self, phase: float, lam: float = 1550.0) -> str:
+        """Set the segment piston using a phase command.
+
+        This converts a phase (radians) into an optical path difference expressed
+        as a segment piston (nm). The command uses the configured piston range
+        to define the phase origin and direction:
+
+        - phase 0 rad corresponds to the center of the piston range,
+          i.e. mean(``Config().get('dm.piston_range')``)
+        - phase in [0, pi] moves the piston more negative ("recedes")
+        - phase in (pi, 2*pi) moves the piston more positive ("advances")
+
+        The phase is first wrapped modulo 2*pi.
+
+        Parameters
+        ----------
+        phase : float
+            Phase command in radians.
+        lam : float, optional
+            Wavelength in nanometers. Default is 1550.
+
+        Returns
+        -------
+        str
+            Hardware response string from the DM controller.
+
+        Warns
+        -----
+        UserWarning
+            If the target piston is outside the configured piston range.
+        """
+        lam_nm = float(lam)
+        phi = float(phase) % (2 * np.pi)
+
+        pr = Config().get('dm.piston_range')
+        if pr is None or len(pr) != 2:
+            raise ValueError("Config key 'dm.piston_range' must be a 2-element list [min_nm, max_nm]")
+
+        p_min, p_max = float(pr[0]), float(pr[1])
+        p0 = int(0.5 * (p_min + p_max))
+
+        # Map phase to piston offset in [-lam/2, +lam/2)
+        # so that 0..pi produces negative offset and pi..2pi produces positive.
+        delta_nm = -((phi / (2 * np.pi)) * lam_nm)
+        if phi > np.pi:
+            delta_nm = lam_nm - ((phi / (2 * np.pi)) * lam_nm)
+
+        piston_target = p0 + float(delta_nm)
+
+        if piston_target < p_min or piston_target > p_max:
+            warnings.warn(
+                f"Requested piston {piston_target:.1f} nm is outside configured range [{p_min:.1f}, {p_max:.1f}] nm for segment {self.id}.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        return self.set_piston(piston_target)
     
     def get_piston(self) -> float:
         """
