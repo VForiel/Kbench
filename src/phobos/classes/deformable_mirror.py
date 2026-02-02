@@ -14,10 +14,31 @@ class DM(metaclass=Singleton):
     """
     Singleton Class to represent a deformable mirror (DM) in the optical system.
 
+        Hardware ranges (bench reference)
+        -------------------------------
+        The DM has segment-dependent stroke limits. On the PHOBos bench, the injection
+        segments typically used for coupling (e.g. around segments 111-114, 135-138,
+        145-148 depending on the mapping in ``dm.injection_segments``) have piston
+        ranges of roughly:
+
+        - Segments 111-114: piston in [-2520, 264] nm (delta ~2784 nm)
+        - Segments 145-148: piston in [-2557, 214] nm (delta ~2771 nm)
+        - Segments 135-138: piston in [-2530, 230] nm (delta ~2760 nm)
+
+        Tip/tilt ranges depend on the current piston working point. Around typical
+        injection working pistons (-1128 nm / -1150 nm), absolute tip/tilt can reach
+        approximately ±5.4 mrad in both axes. In normal operation, tip/tilt values
+        are usually kept below ~1.5 mrad for alignment stability.
+
+        Notes
+        -----
+        - For authoritative limits, always query the controller via
+            :meth:`Segment.get_piston_range`, :meth:`Segment.get_tip_range`, and
+            :meth:`Segment.get_tilt_range`.
+        - Software-side safety clamping is applied in :meth:`Segment.set_piston`.
+
     Attributes
     ----------
-    serial_number : str
-        Serial number of the DM.
     segments : list[Segment]
         List of segments of the DM.
     """
@@ -113,7 +134,7 @@ class DM(metaclass=Singleton):
         """
 
         config = {
-            "serial_number": self.serial_number,
+            "serial_number": Config().get('dm.serial_number'),
             "segments": {}
         }
 
@@ -913,6 +934,15 @@ class Segment():
         str
             The response of the mirror.
         """
+        # Clamp to hardware limits (query current range because it can depend on
+        # the current segment state).
+        try:
+            p_min, p_max = self.get_piston_range()
+            value = float(np.clip(float(value), float(p_min), float(p_max)))
+        except Exception:
+            # If range query fails (e.g. sandbox/mock), proceed without clamping.
+            value = float(value)
+
         self.piston = value
         response = DM().bmcdm.set_segment(self.id, value, self.tip, self.tilt, True, True)
         time.sleep(Config().get('dm.stabilization_time'))  # Stabilization delay for BMC hardware
