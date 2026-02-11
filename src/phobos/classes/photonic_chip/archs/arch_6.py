@@ -523,6 +523,7 @@ class Arch6(Arch, metaclass=Singleton):
         lam: float = 1550.0,
         n_measures: int = 1,
         aggregate_method = np.median,
+        total_flux = None,
     ) -> dict:
         """
         Optimize phase shifter offsets to maximize nulling performance (minimize Null-Depth).
@@ -534,8 +535,6 @@ class Arch6(Arch, metaclass=Singleton):
         ----------
         beta : float, optional
             Descent step size. Default is 0.8.
-        bright_output : int, optional
-            Index of the bright output channel. Default is None (use config).
         verbose : bool, optional
             Print iteration details. Default is False.
         plot : bool, optional
@@ -556,6 +555,8 @@ class Arch6(Arch, metaclass=Singleton):
             (negative / current / positive). Default is 1.
         aggregate_method : Callable[[np.ndarray], np.ndarray], optional
             Aggregation method for repeated measurements. Default is np.median.
+        total_flux : float, optional
+            If provided, the metric will be computed using the formula: max_null / (total_flux - max_null) instead of max_null / bright to avoid camera saturation issues. This can be useful when the bright output is saturated but the total flux is known from separate measurements.
         Returns
         -------
         dict
@@ -581,9 +582,7 @@ class Arch6(Arch, metaclass=Singleton):
         >>> res['pistons_nm']  # pistons applied on DM inputs
         """
         
-        # Get bright output from config
-        if bright_output is None:
-            bright_output = Config().get('photonic_chip.bright_output', 0)
+        bright_output = Config().get('photonic_chip.bright_output', 0)
         
         # Validate n_measures
         n = int(n_measures)
@@ -609,8 +608,12 @@ class Arch6(Arch, metaclass=Singleton):
             shifter_indices = range(len(self.shifters))
 
         # History
-        depth_history = []
+        metric_history = []
         shifters_history = []
+        nulls_history = []
+        bright_history = []
+        if total_flux is not None:
+            bright_est_history = []
 
         # Cache current actuator states to avoid repeated hardware calls
         if use_dm:
@@ -620,7 +623,7 @@ class Arch6(Arch, metaclass=Singleton):
             # Phase shifters: radians
             current_phases = [shifter.get_phase() for shifter in self.shifters]
 
-        def get_metric() -> float:
+        def get_metric(ret_outputs=False) -> float:
 
             outs_list = []
             for _ in range(n):
@@ -631,15 +634,23 @@ class Arch6(Arch, metaclass=Singleton):
             outs = aggregate_method(outs_stack, axis=0)
             outs[outs < 1e-10] = 1e-10  # Filter negative value (noise) and zeros
 
-            b = outs[bright_output]
+            b_meas = outs[bright_output]
 
             # Remove bright output from outs
-            outs_wo_bright = np.delete(outs, int(bright_output))
+            nulls = np.delete(outs, int(bright_output))
 
-            max_null = float(np.max(outs_wo_bright))
-            if b <= 0:
-                return float('inf')
-            return max_null / b
+            max_null = np.max(nulls)
+            
+            if total_flux is not None:
+                metric = max_null / (total_flux - np.sum(nulls))  # Avoid using bright output if total flux is known to prevent saturation issues
+            else:
+                metric = max_null / b_meas
+
+            metric = max_null
+
+            if ret_outputs:
+                return metric, b_meas, nulls
+            return metric
 
         import time
 
@@ -659,7 +670,7 @@ class Arch6(Arch, metaclass=Singleton):
                 log = ""
                 
                 # Measure current state
-                m_old = get_metric()
+                m_old, bright, nulls = get_metric(ret_outputs=True)
 
                 # Get current actuator state from cache
                 current_phase = current_phases[i]
@@ -690,8 +701,12 @@ class Arch6(Arch, metaclass=Singleton):
                     shifter.set_phase(current_phase)
 
                 # Record history
-                depth_history.append(m_old)
+                metric_history.append(m_old)
                 shifters_history.append(list(current_phases)) # Use cached values
+                nulls_history.append(nulls)
+                bright_history.append(bright)
+                if total_flux is not None:
+                    bright_est_history.append(total_flux - np.sum(nulls))
 
                 # Decision logic: Minimize Metric
                 log += f"Shift {shifter.channel} Metric (-|=|+): {m_neg:.2e} | {m_old:.2e} | {m_pos:.2e} -> "
@@ -731,64 +746,65 @@ class Arch6(Arch, metaclass=Singleton):
         print(f"✅ Genetic calibration complete in {iteration_count} iterations.")
         
         fig = None
-        if plot and plt is not None:
-            shifters_hist_arr = np.array(shifters_history)
+        if plot:
+            import matplotlib.pyplot as plt
+            fig, axs = plt.subplots(5, 1, figsize=figsize)
+            axs = axs.flatten()
 
-            fig, axs = plt.subplots(2, 1, figsize=figsize)
-            
-            axs[0].plot(depth_history)
+            # Metric Evolution
+            axs[0].plot(np.ones(len(metric_history)) * np.mean(metric_history[-10:]), '--', color='black', alpha=0.5)
+            axs[0].plot(metric_history)
+            axs[0].set_ylabel("Metric")
+            axs[0].set_title(f"Metric evolution")
+            axs[0].set_yscale('log')
 
-            # Show mean null-depth over the last 10 steps (robust convergence indicator)
-            if len(depth_history) >= 1:
-                last_n = min(10, len(depth_history))
-                tail_mean = float(np.mean(depth_history[-last_n:]))
-                axs[0].axhline(
-                    tail_mean,
-                    color='k',
-                    linestyle='--',
-                    linewidth=1.5,
-                    alpha=0.8,
-                    label=f"Last {last_n} mean: {tail_mean:.2e}",
-                )
-                axs[0].legend(loc='best', fontsize='small')
+            # Phase Evolution
+            for i in range(len(self.shifters)):
+                axs[1].plot([ph[i] for ph in shifters_history], label=f"Shifter {self.shifters[i].channel}")
+            axs[1].set_ylabel("Phase (rad)")
+            axs[1].set_title("Phase Evolution")
 
-            axs[0].set_xlabel("Steps")
-            axs[0].set_ylabel("Mean Null-Depth")
-            axs[0].set_yscale("log")
-            axs[0].set_title(f"Performance of the Nuller (t={elapsed_s:.2f}s)")
-            
-            for i in range(shifters_hist_arr.shape[1]):
-                if use_dm:
-                    seg_id = dm_segments_list[i]
-                    axs[1].plot(shifters_hist_arr[:, i], label=f"Seg {seg_id}")
-                else:
-                    axs[1].plot(shifters_hist_arr[:, i], label=f"Ch {self.shifters[i].channel}")
-            
-            axs[1].set_xlabel("Steps")
-            if use_dm:
-                axs[1].set_ylabel("Phase (rad)")
-                axs[1].set_title("Convergence of DM phases")
-            else:
-                axs[1].set_ylabel("Phase shift (rad)")
-                axs[1].set_title("Convergence of phase shifters")
-            axs[1].legend(loc='upper right', bbox_to_anchor=(1,1), fontsize='small', ncol=2)
-            
+            # Nulls Evolution
+            nulls_history = np.array(nulls_history)
+            for i in range(nulls_history.shape[1]):
+                axs[2].plot(nulls_history[:, i], label=f"Null {i+1}")
+            axs[2].set_ylabel("Null Flux (ADU)")
+            axs[2].set_title("Nulls Evolution")
+            axs[2].set_yscale('log')
+
+            # Bright Evolution
+            if total_flux is not None:
+                axs[3].plot(bright_est_history, label="Estimated Bright (Total - Nulls)", linestyle='--')
+            axs[3].plot(bright_history, label="Bright Output")
+            axs[3].set_ylabel("Bright Flux (ADU)")
+            axs[3].set_title("Bright Output Evolution")
+            axs[3].set_yscale('log')
+
+            # Null Depth Evolution
+            null_depth_history = np.mean(nulls_history, axis=1) / np.array(bright_history)
+            if total_flux is not None:
+                null_depth_est_history = np.mean(nulls_history, axis=1) / np.array(bright_est_history)
+                axs[4].plot(null_depth_est_history, label="Null Depth (Estimated)", linestyle='--')
+            axs[4].plot(null_depth_history, label="Null Depth")
+            axs[4].set_ylabel("Null Depth")
+            axs[4].set_title("Null Depth Evolution")
+            axs[4].set_yscale('log')
+
+            # Common
+            for ax in axs:
+               ax.set_xlabel("Steps")
+
+            ax.legend()
             if save_as:
-                plt.savefig(save_as, dpi=150, bbox_inches='tight')
+                fig.savefig(save_as, dpi=150, bbox_inches='tight')
             plt.show()
 
-        result = {
+        return {
             "phases_evol": np.array(shifters_history),
-            "depth_evol": np.array(depth_history),
+            "depth_evol": np.array(metric_history),
             "figure": fig,
+            "phases": np.array(current_phases),
         }
-
-        if use_dm:
-            result.update({"phases": np.array(current_phases, dtype=float)})
-        else:
-            result.update({"phases": np.array(current_phases)})
-
-        return result
 
     def predict_null_calibration_gen(
         self,
