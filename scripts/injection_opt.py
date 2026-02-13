@@ -6,9 +6,7 @@ to find the flat position, best injection and off injection.
 """
 
 import phobos
-import phobos
 import matplotlib.pyplot as plt
-from xaosim.shmlib import shm
 import numpy as np
 from scipy.optimize import curve_fit
 from tqdm import tqdm
@@ -167,7 +165,7 @@ def check_cropping(crop_centers, crop_size):
     """
     camera = phobos.Cred3()
     img = camera.get_image(subtract_dark=True)
-    tt_cropped = camera.crop_outputs_from_image(img, crop_centers, crop_size)
+    tt_cropped = camera.crop_outputs_from_image(img)#, crop_centers, crop_size)
     
     plt.figure(figsize=(10, 10))
     for i in range(len(tt_cropped)):
@@ -192,7 +190,7 @@ if __name__ == '__main__':
     wait_seg = 0.005
     mid_piston = [-1150]*4
     active_segs0 = [111, 112, 113, 114]
-    active_segs0 = [135, 136, 137, 138]
+    active_segs0 = [135, 136, 137, 138][::-1]
     save_path0 = '/media/photonics/SSD 128Go/data/'+'%04d'%(date_now.year)+'-'+'%02d'%(date_now.month)+'-'+'%02d'%(date_now.day)+'/'
     
 
@@ -201,10 +199,10 @@ if __name__ == '__main__':
     print('All seg flat')
     
     crop_size = 7 # px window around the output
-    crop_centers = np.array([(354, 270),
-                        (354, 255),
-                        (354, 240),
-                        (354, 224)])
+    crop_centers = np.array([(357, 271),
+                        (357, 256),
+                        (357, 240),
+                        (357, 225)])
     
     # check_cropping(crop_centers, crop_size)
     # ppp
@@ -258,9 +256,9 @@ if __name__ == '__main__':
                 for tilt in tilt_range:
                     dm.segments[active_segs[i]].set_ptt(mid_piston[i], tip, tilt)
                     sleep(wait_seg)
-                    flx = np.zeros_like(camera.get_outputs(crop_centers, crop_size))
+                    flx = np.zeros_like(camera.get_outputs(True, 'mean'))
                     for k in range(avg):
-                        flx0 = camera.get_outputs(crop_centers, crop_size)
+                        flx0 = camera.get_outputs(True, 'mean')
                         flx = flx + flx0
                     flx /= float(avg)
                     semval = camera.cam.sems[camera.semid].value
@@ -271,7 +269,7 @@ if __name__ == '__main__':
             dm.segments[active_segs[i]].set_ptt(mid_piston[i], off_tip, off_tilt)
             sleep(wait_seg)
             
-        tt_flux = np.array(tt_flux) # Axes (Beams, tip, tilt, framey, framex)
+        tt_flux = np.array(tt_flux) # Axes (Beams, tip, tilt, flux outputs)
         log_semval = np.array(log_semval)
         np.savetxt(save_path+'log_semval.txt', log_semval)
         [dm.segments[seg].set_ptt(mid_piston[i], 0., 0.) for seg in active_segs]
@@ -326,7 +324,7 @@ if __name__ == '__main__':
         plt.figure(figsize=(10, 10))
         for i in range(len(active_segs)):
             plt.subplot(2, 2, i+1)
-            plt.title('Beam '+str(i+1))
+            plt.title('Seg '+str(active_segs0[i]))
             plt.imshow(flux[i], origin='lower', cmap='jet',
                        extent=[-ttamp-tilt_step/2, ttamp+tilt_step/2,
                                -ttamp-tip_step/2, ttamp+tip_step/2],

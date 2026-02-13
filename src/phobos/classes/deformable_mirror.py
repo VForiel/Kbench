@@ -430,7 +430,7 @@ class DM(metaclass=Singleton):
         """
         seg_indices = self._parse_injection_segments(segments)
 
-        mean_piston = np.mean(Config().get('dm.injection_piston_nm'))
+        mean_piston = np.mean(Config().get('dm.piston_range'))
         
         # Apply flat position to selected segments
         for seg_idx in seg_indices:
@@ -462,12 +462,480 @@ class DM(metaclass=Singleton):
 
         print(f"Applied MAX injection calibration on segments: {seg_indices}")
 
+    def calibrate_injection2(self,
+        grid_n: int = 31,
+        ttamp: float = 3.0,
+        piston_nm: float = -1150.0,
+        avg_frames: int = 5,
+        use_tqdm: bool = True,
+        plot: bool = True,
+        off_tip: float = 0.,
+        off_tilt: float = -5.47,
+        verbose: bool = True
+        ):
+
+        import phobos
+        from scipy.optimize import curve_fit
+        from scipy.interpolate import interpn
+
+        def twoD_Gaussian(xy, amplitude, yo, xo, sigma_y, sigma_x, theta, offset):
+            x, y = xy
+            xo = float(xo)
+            yo = float(yo)
+            a = (np.cos(theta)**2)/(2*sigma_x**2) + (np.sin(theta)**2)/(2*sigma_y**2)
+            b = -(np.sin(2*theta))/(4*sigma_x**2) + (np.sin(2*theta))/(4*sigma_y**2)
+            c = (np.sin(theta)**2)/(2*sigma_x**2) + (np.cos(theta)**2)/(2*sigma_y**2)
+            g = offset + amplitude*np.exp( - (a*((x-xo)**2) + 2*b*(x-xo)*(y-yo)
+                                    + c*((y-yo)**2)))
+            return g.ravel()
+
+        def sigma2_of_twoD_Gaussian_slice(amplitude, xo, sigma_y, sigma_x, theta, offset, m):
+            xo = float(xo)
+            a = (np.cos(theta)**2)/(2*sigma_x**2) + (np.sin(theta)**2)/(2*sigma_y**2)
+            b = -(np.sin(2*theta))/(4*sigma_x**2) + (np.sin(2*theta))/(4*sigma_y**2)
+            c = (np.sin(theta)**2)/(2*sigma_x**2) + (np.cos(theta)**2)/(2*sigma_y**2)
+
+            Sigma2 = -1/2. * 1. / (-a + c * m**2 + 2 * b * m)
+            return Sigma2
+
+        path = phobos.archive.new("injection_scan")
+
+        injection_seg_indices = self._parse_injection_segments(None)
+
+        # Scan parameters (single scan per segment)
+        tip_grid, tip_step = np.linspace(-float(ttamp), float(ttamp), int(grid_n), retstep=True)
+        tilt_grid, tilt_step = np.linspace(-float(ttamp), float(ttamp), int(grid_n), retstep=True)
+
+        # Optional tqdm progress bar
+        iterator = injection_seg_indices
+        if use_tqdm:
+            try:
+                from tqdm import tqdm  # type: ignore
+
+                iterator = tqdm(injection_seg_indices, desc="Calibrating injection", leave=True)
+            except Exception:
+                iterator = injection_seg_indices
+
+        camera = phobos.Cred3()
+
+        # Off on 4 apertures
+        [self.segments[seg].set_ptt(piston_nm, off_tip, off_tilt) for seg in injection_seg_indices]
+        print('TT off+piston the 4 segments')
+
+        # Do scan
+        tt_flux = []
+        for seg in iterator:
+            temp1 = []
+            for tip in tip_grid:
+                temp2 = []
+                for tilt in tilt_grid:
+                    self.segments[seg].set_ptt(piston_nm, tip, tilt)
+                    flx = np.zeros_like(camera.get_outputs(True, 'mean'))
+                    for k in range(avg_frames):
+                        flx0 = camera.get_outputs(True, 'mean')
+                        flx = flx + flx0
+                    flx /= float(avg_frames)
+                    temp2.append(flx)
+                temp1.append(temp2)
+            tt_flux.append(temp1)
+            self.segments[seg].set_ptt(piston_nm, off_tip, off_tilt)
+
+        tt_flux = np.array(tt_flux) # Axes (Beams, tip, tilt, framey, framex)
+        [self.segments[seg].set_ptt(piston_nm, 0., 0.) for seg in injection_seg_indices]
+        print('Flat+piston the 4 segments')
+
+        # Process data
+        flux = np.sum(tt_flux, axis=-1)
+
+        # Find max injection
+        max_ptt = {}
+
+        x, y = np.meshgrid(tilt_grid, tip_grid)
+        params = []
+        pcovs = []
+
+        for i in range(flux.shape[0]):
+            output = flux[i]
+            initial_guess = [output.max(), 0., 0., 1., 1., 0., 0.]
+            try:
+                popt, pcov = curve_fit(twoD_Gaussian, (x, y), output.ravel(), p0=initial_guess)
+            except RuntimeError as e:
+                print(i, e)
+                popt = np.zeros((len(initial_guess),))
+                pcov = np.zeros((len(initial_guess), len(initial_guess)))
+            params.append(popt)
+            pcovs.append(pcov)
+
+            max_ptt[str(injection_seg_indices[i])] = [piston_nm, popt[1], popt[2]]
+
+            if verbose:
+                print(f"Injection max of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[1]:.4f},{popt[2]:.4f}) mrad; flux = {popt[0]:.4g}")
+
+        params = np.array(params)
+        pcovs = np.array(pcovs)
+        seg_max = params[:,1:3] # x and y coordinates
+
+        # Find balanced injection
+        balanced_ptt = {}
+
+        ## Identify the weakest beam
+        weak_beam_idx = np.argmin(params[:,0])
+        beams_idx = [i for i in range(params[:,0].size)]
+
+        weak_offset = params[weak_beam_idx,-1]
+        weak_amplitude = params[weak_beam_idx,0]
+
+        # For the 3 other beams...
+        balanced_tt = []
+        balanced_flux = []
+        balanced_interp = []
+
+        for i in beams_idx:
+            param = params[i]
+            if i != weak_beam_idx:
+                # ...trace a line in the TT map from the max of injection and no injection
+                # line equation is: y = slope * (x - x0) + y0
+                slope = (param[1] - off_tip) / (param[2] - off_tilt)
+                intersect = param[1]
+
+                # Solve the equation B + A * exp(-(x-x0)**2 / (2 * Sigma**2)) = B_min + A_min
+                # where _min is the weakest beam properties
+                cste = (weak_offset - param[-1] + weak_amplitude) / param[0]
+                Sigma2 = sigma2_of_twoD_Gaussian_slice(param[0], param[2], param[3], param[4],
+                                                       param[5], param[6], slope)
+                tilt_b = param[2] - (2 * Sigma2 * np.log(1/cste))**0.5
+
+                tip_b = slope * (tilt_b - off_tilt) + intersect
+                flux_b = twoD_Gaussian((tilt_b, tip_b), *param)[0]
+            else:
+                tip_b = param[1]
+                tilt_b = param[2]
+                flux_b = twoD_Gaussian((tilt_b, tip_b), *param)[0]
+
+            flux_interp = interpn((tilt_grid, tip_grid), flux[i], (tilt_b, tip_b), method='linear')[0]
+
+            balanced_tt.append([tip_b, tilt_b])
+            balanced_flux.append(flux_b)
+            balanced_interp.append(flux_interp)
+
+            balanced_ptt[str(injection_seg_indices[i])] = [piston_nm, tip_b, tilt_b]
+
+            if verbose:
+                print(f"Balanced injection of seg={injection_seg_indices[i]}: (tip, tilt) = ({tip_b:.4f},{tilt_b:.4f}) mrad; flux = {flux_b:.4g}; interp = {flux_interp:.4g}")
+
+        balanced_tt = np.array(balanced_tt)
+        balanced_flux = np.array(balanced_flux)
+        balanced_interp = np.array(balanced_interp)
+
+        # Plot
+        if plot:
+            import matplotlib.pyplot as plt
+            plt.figure(figsize=(10, 10))
+            for i in range(len(injection_seg_indices)):
+                plt.subplot(2, 2, i+1)
+                plt.title('Seg '+str(injection_seg_indices[i]))
+                plt.imshow(flux[i], origin='lower', cmap='jet',
+                        extent=[-ttamp-tilt_step/2, ttamp+tilt_step/2,
+                                -ttamp-tip_step/2, ttamp+tip_step/2],
+                        vmin=flux.min(),
+                        vmax=flux.max())
+                plt.colorbar()
+                plt.scatter(seg_max[i,1], seg_max[i,0], c='w', marker='+', s=100, label='tt_max')
+                plt.scatter(balanced_tt[i, 1], balanced_tt[i, 0], marker='o', c='w', s=55, label=f"tt_bal (f={balanced_flux[i]:.3g})")
+                plt.scatter(balanced_tt[i, 1], balanced_tt[i, 0], marker='o', c='w', s=55, label=f"tt_bal (f={balanced_interp[i]:.3g})")
+                plt.xlabel('Tilt (mrad)')
+                plt.ylabel('Tip (mrad)')
+            plt.tight_layout()
+            plt.savefig(path / 'TT_map.png', dpi=150, format='png')
+
+        # Persist only the calibrated PTT maps as requested.
+        # Batch updates to avoid creating multiple backups.
+        # self._set_ptt_map('dm.ptt_max', max_ptt, autosave=False)
+        # self._set_ptt_map('dm.ptt_balanced', balanced_ptt, autosave=False)
+
+        # Single save at the end
+        # phobos.config.save_to_file()
+
+        print("✅ Injection calibration saved to config under dm.ptt_max and dm.ptt_balanced")
+        return {'max': max_ptt, 'balanced': balanced_ptt}
+
+    def calibrate_injection3(self,
+        grid_n: int = 31,
+        ttamp: float = 3.0,
+        piston_nm: float = -1150.0,
+        avg_frames: int = 1,
+        use_tqdm: bool = True,
+        plot: bool = True,
+        off_tip: float = 0.,
+        off_tilt: float = -5.47,
+        verbose: bool = True
+        ):
+
+        import phobos
+        from scipy.optimize import curve_fit
+        from scipy.interpolate import interp1d, interpn
+
+
+        def twoD_Gaussian(xy, amplitude, yo, xo, sigma_y, sigma_x, theta, offset):
+            x, y = xy
+            xo = float(xo)
+            yo = float(yo)
+            a = (np.cos(theta)**2)/(2*sigma_x**2) + (np.sin(theta)**2)/(2*sigma_y**2)
+            b = -(np.sin(2*theta))/(4*sigma_x**2) + (np.sin(2*theta))/(4*sigma_y**2)
+            c = (np.sin(theta)**2)/(2*sigma_x**2) + (np.cos(theta)**2)/(2*sigma_y**2)
+            g = offset + amplitude*np.exp( - (a*((x-xo)**2) + 2*b*(x-xo)*(y-yo)
+                                    + c*((y-yo)**2)))
+            return g.ravel()
+        
+        def phys_to_pixel(phys_point, extent, steps):
+            """
+            Convert physical coordinates to discrete pixel grid indices.
+        
+            Parameters
+            ----------
+            phys_point : tuple or list of float
+                The (y, x) coordinates of the point in physical space.
+            extent : tuple or list of float
+                The boundaries of the physical space as (y_min, y_max, x_min, x_max).
+            steps : tuple or list of float
+                The resolution or cell size (step_y, step_x) of each pixel
+                in physical units.
+        
+            Returns
+            -------
+            row : int
+                The vertical grid index (calculated from y_phys).
+            col : int
+                The horizontal grid index (calculated from x_phys).
+        
+            Notes
+            -----
+            The mapping assumes that the pixel indices increase in the same direction
+            as the physical coordinates. This function uses truncation (casting to int)
+            to determine the index.
+            """
+            y_phys, x_phys = phys_point
+            y_min, y_max, x_min, x_max = extent
+            stepy, stepx = steps
+        
+            col = (x_phys - x_min) / stepx
+            row = (y_phys - y_min) / stepy
+        
+            return int(round(row)), int(round(col))
+        
+        def pixel_to_phys(pixel_points, intersect, step):
+            """
+                Convert discrete pixel indices to continuous physical coordinates.
+            
+                Parameters
+                ----------
+                pixel_points : tuple of int or ndarray
+                    The pixel grid indices. Can be single dimension
+                intersects : tuple of float
+                    The physical origin or intercept value
+                    corresponding to pixel index 0.
+                steps : tuple of float
+                    The physical size or spacing of a single pixel.
+            
+                Returns
+                -------
+                phys : float or ndarray
+                    The calculated physical coordinate(s).
+            
+                Notes
+                -----
+                This transformation follows the linear model:
+                $Physical = (Pixel \times Step) + Intercept$
+                """            
+            phys = pixel_points * step + intersect
+            
+            return phys
+        
+
+        path = phobos.archive.new("injection_scan")
+
+        injection_seg_indices = self._parse_injection_segments(None)
+
+        # Scan parameters (single scan per segment)
+        tip_grid, tip_step = np.linspace(-float(ttamp), float(ttamp), int(grid_n), retstep=True)
+        tilt_grid, tilt_step = np.linspace(-float(ttamp), float(ttamp), int(grid_n), retstep=True)
+
+        # Optional tqdm progress bar
+        iterator = injection_seg_indices
+        if use_tqdm:
+            try:
+                from tqdm import tqdm  # type: ignore
+
+                iterator = tqdm(injection_seg_indices, desc="Calibrating injection", leave=True)
+            except Exception:
+                iterator = injection_seg_indices
+
+        camera = phobos.Cred3()
+
+        # # Off on 4 apertures
+        # [self.segments[seg].set_ptt(piston_nm, off_tip, off_tilt) for seg in injection_seg_indices]
+        # print('TT off+piston the 4 segments')
+
+        # # Do scan
+        # tt_flux = []
+        # for seg in iterator:
+        #     temp1 = []
+        #     for tip in tip_grid:
+        #         temp2 = []
+        #         for tilt in tilt_grid:
+        #             self.segments[seg].set_ptt(piston_nm, tip, tilt)
+        #             flx = np.zeros_like(camera.get_outputs(True, 'mean'))
+        #             for k in range(avg_frames):
+        #                 flx0 = camera.get_outputs(True, 'mean')
+        #                 flx = flx + flx0
+        #             flx /= float(avg_frames)
+        #             temp2.append(flx)
+        #         temp1.append(temp2)
+        #     tt_flux.append(temp1)
+        #     self.segments[seg].set_ptt(piston_nm, off_tip, off_tilt)
+
+        # tt_flux = np.array(tt_flux) # Axes (Beams, tip, tilt, framey, framex)
+        # [self.segments[seg].set_ptt(piston_nm, 0., 0.) for seg in injection_seg_indices]
+        # print('Flat+piston the 4 segments')
+
+        # Process data
+        # flux = np.sum(tt_flux, axis=-1)
+        flux = np.load('/media/photonics/SSD 128Go/data/2026-02-12/001/flx_deleteme.npy')
+
+        # Find max injection
+        max_ptt = {}
+
+        x, y = np.meshgrid(tilt_grid, tip_grid)
+        params = []
+        pcovs = []
+
+        for i in range(flux.shape[0]):
+            output = flux[i]
+            initial_guess = [output.max(), 0., 0., 1., 1., 0., 0.]
+            try:
+                popt, pcov = curve_fit(twoD_Gaussian, (x, y), output.ravel(), p0=initial_guess)
+            except RuntimeError as e:
+                print(i, e)
+                popt = np.zeros((len(initial_guess),))
+                pcov = np.zeros((len(initial_guess), len(initial_guess)))
+            params.append(popt)
+            pcovs.append(pcov)
+
+            max_ptt[str(injection_seg_indices[i])] = [piston_nm, popt[1], popt[2]]
+
+            if verbose:
+                print(f"Injection max of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[1]:.4f},{popt[2]:.4f}) mrad; flux = {popt[0]:.4g}")
+        
+        print('')
+
+        params = np.array(params)
+        pcovs = np.array(pcovs)
+        seg_max = params[:,1:3] # x and y coordinates
+
+        # Find balanced injection
+        balanced_ptt = {}
+
+        ## Identify the weakest beam
+        weak_beam_idx = np.argmin(flux.max((1,2)))
+        weak_beam_flux = np.min(flux.max((1,2)))
+        beams_idx = np.arange(params[:,0].size)
+        
+        print('***', weak_beam_flux)
+
+        # For the 3 other beams...
+        balanced_tt = []
+        balanced_flux = []
+
+        for i in beams_idx:
+            param = params[i]
+            if i != weak_beam_idx:
+                """
+                We will slice the TT map along tilt axis at the tip of maximum injection.
+                We keep the tilt parts from the minimum value of the grid to the tilti at maximum injection.
+                """
+                
+                # Identification of the pixel of max injection at the grid accuracy
+                max_node = [param[1], param[2]] # tip (row) and tilt (column), in mrad
+                
+                extent = (tip_grid.min(), tip_grid.max(), tilt_grid.min(), tilt_grid.max())
+                steps = (tip_step, tilt_step)
+                max_node_px = phys_to_pixel(max_node, extent, steps)
+                
+                # Pixel where the maximum injection is in mrad units
+                max_node2 = pixel_to_phys(max_node_px[1], tilt_grid.min(), tilt_step)
+                
+                # We slice the TT map at the row of max injection and
+                # slice the columns between the minimum grid (idx 0) and the column of max injection
+                slice_tilt = tilt_grid[tilt_grid <= max_node2]
+                profile = interpn((tip_grid, tilt_grid), flux[i], (max_node[0], slice_tilt), method='cubic')
+
+                # We locate the seeked balanced flux between 2 pixels
+                px_lower = np.where(profile <= weak_beam_flux)[0][-1]
+                px_higher = np.where(profile > weak_beam_flux)[0][0]
+                
+                tilt_low, flx_low = slice_tilt[px_lower], profile[px_lower]
+                tilt_high, flx_high = slice_tilt[px_higher], profile[px_higher]
+                
+                # We make a linear interpolation between these two pixels to get the tilt for balanced value
+                interp_tilt = interp1d([flx_low, flx_high], [tilt_low, tilt_high])
+                
+                tilt_b = interp_tilt(weak_beam_flux)
+                tip_b = max_node[0]
+                flux_b = interpn((tilt_grid, tip_grid), flux[i], (tip_b, tilt_b), method='cubic')[0]
+            else:
+                tip_b = param[1]                
+                tilt_b = param[2]
+                flux_b = weak_beam_flux
+            
+            balanced_tt.append([tip_b, tilt_b])
+            balanced_flux.append(flux_b)
+
+            balanced_ptt[str(injection_seg_indices[i])] = [piston_nm, tip_b, tilt_b]
+
+            if verbose:
+                print(f"Balanced injection of seg={injection_seg_indices[i]}: (tip, tilt) = ({tip_b:.4f},{tilt_b:.4f}) mrad; flux = {flux_b:.5g}")
+
+        balanced_tt = np.array(balanced_tt)
+        balanced_flux = np.array(balanced_flux)
+
+        # Plot
+        if plot:
+            import matplotlib.pyplot as plt
+            plt.figure(figsize=(10, 10))
+            for i in range(len(injection_seg_indices)):
+                plt.subplot(2, 2, i+1)
+                plt.title('Seg '+str(injection_seg_indices[i]))
+                plt.imshow(flux[i], origin='lower', cmap='jet',
+                        extent=[-ttamp-tilt_step/2, ttamp+tilt_step/2,
+                                -ttamp-tip_step/2, ttamp+tip_step/2],
+                        vmin=flux.min(),
+                        vmax=flux.max())
+                plt.colorbar()
+                plt.scatter(seg_max[i,1], seg_max[i,0], c='w', marker='+', s=100, label='tt_max')
+                plt.scatter(balanced_tt[i, 1], balanced_tt[i, 0], marker='o', c='w', s=55, label=f"tt_bal (f={balanced_flux[i]:.3g})")
+                plt.xlabel('Tilt (mrad)')
+                plt.ylabel('Tip (mrad)')
+            plt.tight_layout()
+            plt.savefig(path / 'TT_map.png', dpi=150, format='png')
+
+        # Persist only the calibrated PTT maps as requested.
+        # Batch updates to avoid creating multiple backups.
+        # self._set_ptt_map('dm.ptt_max', max_ptt, autosave=False)
+        # self._set_ptt_map('dm.ptt_balanced', balanced_ptt, autosave=False)
+
+        # Single save at the end
+        # phobos.config.save_to_file()
+
+        print("✅ Injection calibration saved to config under dm.ptt_max and dm.ptt_balanced")
+        return {'max': max_ptt, 'balanced': balanced_ptt}
+
+
     def calibrate_injection(
         self,
         plot: bool = False,
-        grid_n: int = 20,
-        tip_range_mrad: float = 2.0,
-        tilt_range_mrad: float = 2.0,
+        grid_n: int = 31,
+        tip_range_mrad: float = 3.0,
+        tilt_range_mrad: float = 3.0,
         piston_nm: float = -1150.0,
         verbose: bool = False,
         use_tqdm: bool = True,
