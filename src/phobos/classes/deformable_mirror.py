@@ -56,7 +56,7 @@ class DM(metaclass=Singleton):
         # If already initialized, return existing instance
         if self._initialized:
             return
-            
+
         self._initialized = True
 
         # Initialize the DM with the given serial number
@@ -71,7 +71,7 @@ class DM(metaclass=Singleton):
     def __iter__(self):
         """
         Iterate over the segments of the DM.
-        
+
         Yields
         -------
         Segment
@@ -96,12 +96,12 @@ class DM(metaclass=Singleton):
             index = int(index)
         except ValueError:
             raise TypeError("Index must be an integer.")
-        
+
         if index < 0 or index >= len(self.segments):
             raise IndexError("Index out of range.")
-        
+
         return self.segments[index]
-    
+
     def __len__(self) -> int:
         """
         Get the number of segments in the DM.
@@ -112,7 +112,7 @@ class DM(metaclass=Singleton):
             The number of segments in the DM.
         """
         return len(self.segments)
-    
+
     def __del__(self):
         """
         Close the DM connection when the object is deleted.
@@ -148,7 +148,7 @@ class DM(metaclass=Singleton):
 
         with open(path, 'w') as f:
             json.dump(config, f, indent=4)
-        
+
         print(f"Configuration saved to {path}")
 
     def load_config(self, config_path:str = DEFAULT_CONFIG_PATH):
@@ -163,24 +163,24 @@ class DM(metaclass=Singleton):
 
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"Config file not found: {config_path}")
-        
+
         print(f"Loading config file: {config_path}.")
-        
+
         with open(config_path, 'r') as f:
             config = json.load(f)
-        
+
         for segment_id, segment_config in config["segments"].items():
             segment = self.segments[int(segment_id)]
             segment.set_ptt(segment_config["piston"], segment_config["tip"], segment_config["tilt"])
-        
+
         print("Configuration loaded")
 
     def off(self, segments=None):
         """
         Turn off specified injection segments by applying maximum tilt.
-        
+
         This tilts the segments to deflect light away from the photonic chip inputs.
-        
+
         Parameters
         ----------
         segments : int, array-like, or None, optional
@@ -189,14 +189,14 @@ class DM(metaclass=Singleton):
             - If array-like: multiple input numbers (e.g., [1, 2, 4])
             - If None: turns off all injection segments
             Default is None.
-        
+
         Examples
         --------
         >>> dm = DM()
         >>> dm.off(1)           # Turn off first injection input
         >>> dm.off([1, 3])      # Turn off inputs 1 and 3
         >>> dm.off()            # Turn off all injection inputs
-        
+
         Notes
         -----
         The off position is: piston=-1150 nm, tip=0 mrad, tilt=-5.47 mrad
@@ -209,17 +209,17 @@ class DM(metaclass=Singleton):
             # Convert input number(s) (1-4) to segment indices
             if isinstance(segments, int):
                 segments = [segments]
-            
+
             seg_indices = []
             for seg_num in segments:
                 if not 1 <= seg_num <= len(Config().get('dm.injection_segments')):
                     raise ValueError(f"Segment number must be between 1 and {len(Config().get('dm.injection_segments'))}, got {seg_num}")
                 seg_indices.append(Config().get('dm.injection_segments')[seg_num - 1])
-        
+
         # Apply off position to selected segments
         for seg_idx in seg_indices:
             self.segments[seg_idx].set_ptt(-1150, 0, -5.47)
-        
+
         print(f"Turned off injection segments: {seg_indices}")
 
     def _parse_injection_segments(self, segments: Optional[Union[int, Sequence[int]]]=None) -> List[int]:
@@ -373,12 +373,12 @@ class DM(metaclass=Singleton):
                 print(f"⚠️ Plot skipped: {e}")
 
         return best_tip, best_tilt, best_flux, (flux_map if plot else None)
-    
+
     def zero(self, segments=None):
         """Reset specified injection segments to zero (piston=0, tip=0, tilt=0).
-        
+
         This returns the segments to their nominal position for maximum light coupling.
-        
+
         Parameters
         ----------
         segments : int, array-like, or None, optional
@@ -387,7 +387,7 @@ class DM(metaclass=Singleton):
             - If array-like: multiple input numbers (e.g., [1, 2, 4])
             - If None: optimizes all injection segments
             Default is None.
-        
+
         Examples
         --------
         >>> dm = DM()
@@ -396,7 +396,7 @@ class DM(metaclass=Singleton):
         >>> dm.zero()           # Flatten all injection inputs
         """
         seg_indices = self._parse_injection_segments(segments)
-        
+
         # Apply flat position to selected segments
         for seg_idx in seg_indices:
             self.segments[seg_idx].set_ptt(0, 0, 0)
@@ -405,9 +405,9 @@ class DM(metaclass=Singleton):
 
     def flat(self, segments=None):
         """Reset specified injection segments to flat (piston=mean piston, tip=0, tilt=0).
-        
+
         This returns the segments to their nominal position for maximum light coupling.
-        
+
         Parameters
         ----------
         segments : int, array-like, or None, optional
@@ -416,14 +416,14 @@ class DM(metaclass=Singleton):
             - If array-like: multiple input numbers (e.g., [1, 2, 4])
             - If None: optimizes all injection segments
             Default is None.
-        
+
         Examples
         --------
         >>> dm = DM()
         >>> dm.flat(1)          # Flatten first injection input
         >>> dm.flat([1, 3])     # Flatten inputs 1 and 3
         >>> dm.flat()           # Flatten all injection inputs
-        
+
         Notes
         -----
         The flat position is: piston=0 nm, tip=0 mrad, tilt=0 mrad
@@ -431,7 +431,7 @@ class DM(metaclass=Singleton):
         seg_indices = self._parse_injection_segments(segments)
 
         mean_piston = np.mean(Config().get('dm.piston_range'))
-        
+
         # Apply flat position to selected segments
         for seg_idx in seg_indices:
             self.segments[seg_idx].set_ptt(mean_piston, 0, 0)
@@ -466,7 +466,7 @@ class DM(metaclass=Singleton):
         grid_n: int = 31,
         ttamp: float = 3.0,
         piston_nm: float = -1150.0,
-        avg_frames: int = 5,
+        avg_frames: int = 1,
         use_tqdm: bool = True,
         plot: bool = True,
         off_tip: float = 0.,
@@ -474,11 +474,103 @@ class DM(metaclass=Singleton):
         verbose: bool = True
         ):
 
+        """
+        Calibrate beam injection by scanning tip/tilt coordinates for multiple segments.
+
+        This method performs a 2D raster scan of tip and tilt values for each injection
+        segment (beam). It identifies the optimal injection point via 2D Gaussian fitting
+        and calculates a 'balanced' injection state where all beams are attenuated to
+        match the throughput of the weakest beam.
+
+        Parameters
+        ----------
+        grid_n : int, optional
+            The number of points in one dimension of the square scan grid.
+            The total number of measurements per segment will be ``grid_n**2``.
+            Default is 31.
+        ttamp : float, optional
+            The amplitude of the tip/tilt scan in physical units (typically mrad).
+            The scan ranges from ``-ttamp`` to ``+ttamp``. Default is 3.0.
+        piston_nm : float, optional
+            The constant piston value (in nanometers) applied to the segments during
+            the scan. Default is -1150.0.
+        avg_frames : int, optional
+            Number of camera frames to average at each (tip, tilt) position to
+            reduce measurement noise. Default is 1.
+        use_tqdm : bool, optional
+            If True, displays a progress bar (tqdm) during the calibration scan.
+            Default is True.
+        plot : bool, optional
+            If True, generates and saves a diagnostic plot ('TT_map.png') showing
+            the flux maps, fitted peaks, and balanced positions. Default is True.
+        off_tip : float, optional
+            The tip position to apply to segments when they are "parked" (not being
+            scanned). Default is 0.0.
+        off_tilt : float, optional
+            The tilt position to apply to segments when they are "parked".
+            Default is -5.47.
+        verbose : bool, optional
+            If True, prints calibration details (max flux, coordinates) to the
+            console. Default is True.
+
+        Returns
+        -------
+        dict
+            A dictionary containing calibration results with two keys:
+
+            * **'max'**: A dictionary mapping segment IDs to their optimal [piston, tip, tilt]
+              coordinates (calculated via Gaussian fit).
+            * **'balanced'**: A dictionary mapping segment IDs to the [piston, tip, tilt]
+              coordinates that result in a flux equal to the weakest beam's maximum.
+
+        Notes
+        -----
+        **Balancing Logic:**
+        The 'balanced' injection is determined by:
+        1. Identifying the segment with the lowest peak flux ("weakest link").
+        2. For every other segment, finding the iso-flux contour that matches this
+           weakest flux.
+        3. Interpolating locally between the two pixel coordinates closest to this
+           target flux value to find the precise sub-pixel tip/tilt settings.
+
+        This ensures all beams have uniform intensity, which is critical for high-contrast
+        interferometry.
+        """
+
         import phobos
         from scipy.optimize import curve_fit
-        from scipy.interpolate import interpn
+        from scipy.interpolate import interp1d, interpn
+
 
         def twoD_Gaussian(xy, amplitude, yo, xo, sigma_y, sigma_x, theta, offset):
+            """
+            Generate a flat array of a 2D-Gausian.
+
+            Parameters
+            ----------
+            xy : tuple
+                Meshgrid on which sampling the surface.
+            amplitude : float
+                Amplitude.
+            yo : float
+                Locate parameter along row axis.
+            xo : float
+                Locate parameter along column axis.
+            sigma_y : float
+                Scale parameter of the Gaussian in row axis.
+            sigma_x : float
+                Scale parameter of the Gaussian in column axis.
+            theta : float
+                Orientation of the Gaussian, in radians.
+            offset : float
+                Global offset.
+
+            Returns
+            -------
+            1d-array
+                Flattened array of the 2d Gaussian.
+
+            """
             x, y = xy
             xo = float(xo)
             yo = float(yo)
@@ -489,14 +581,70 @@ class DM(metaclass=Singleton):
                                     + c*((y-yo)**2)))
             return g.ravel()
 
-        def sigma2_of_twoD_Gaussian_slice(amplitude, xo, sigma_y, sigma_x, theta, offset, m):
-            xo = float(xo)
-            a = (np.cos(theta)**2)/(2*sigma_x**2) + (np.sin(theta)**2)/(2*sigma_y**2)
-            b = -(np.sin(2*theta))/(4*sigma_x**2) + (np.sin(2*theta))/(4*sigma_y**2)
-            c = (np.sin(theta)**2)/(2*sigma_x**2) + (np.cos(theta)**2)/(2*sigma_y**2)
+        def phys_to_pixel(phys_point, extent, steps):
+            """
+            Convert physical coordinates to discrete pixel grid indices.
 
-            Sigma2 = -1/2. * 1. / (-a + c * m**2 + 2 * b * m)
-            return Sigma2
+            Parameters
+            ----------
+            phys_point : tuple or list of float
+                The (y, x) coordinates of the point in physical space.
+            extent : tuple or list of float
+                The boundaries of the physical space as (y_min, y_max, x_min, x_max).
+            steps : tuple or list of float
+                The resolution or cell size (step_y, step_x) of each pixel
+                in physical units.
+
+            Returns
+            -------
+            row : int
+                The vertical grid index (calculated from y_phys).
+            col : int
+                The horizontal grid index (calculated from x_phys).
+
+            Notes
+            -----
+            The mapping assumes that the pixel indices increase in the same direction
+            as the physical coordinates. This function uses truncation (casting to int)
+            to determine the index.
+            """
+            y_phys, x_phys = phys_point
+            y_min, y_max, x_min, x_max = extent
+            stepy, stepx = steps
+
+            col = (x_phys - x_min) / stepx
+            row = (y_phys - y_min) / stepy
+
+            return int(round(row)), int(round(col))
+
+        def pixel_to_phys(pixel_points, intersect, step):
+            """
+                Convert discrete pixel indices to continuous physical coordinates.
+
+                Parameters
+                ----------
+                pixel_points : tuple of int or ndarray
+                    The pixel grid indices. Can be single dimension
+                intersects : tuple of float
+                    The physical origin or intercept value
+                    corresponding to pixel index 0.
+                steps : tuple of float
+                    The physical size or spacing of a single pixel.
+
+                Returns
+                -------
+                phys : float or ndarray
+                    The calculated physical coordinate(s).
+
+                Notes
+                -----
+                This transformation follows the linear model:
+                $Physical = (Pixel \times Step) + Intercept$
+                """
+            phys = pixel_points * step + intersect
+
+            return phys
+
 
         path = phobos.archive.new("injection_scan")
 
@@ -546,6 +694,7 @@ class DM(metaclass=Singleton):
 
         # Process data
         flux = np.sum(tt_flux, axis=-1)
+        # flux = np.load('/home/mmartinod/projects/photonics/flx_deleteme.npy')
 
         # Find max injection
         max_ptt = {}
@@ -571,261 +720,6 @@ class DM(metaclass=Singleton):
             if verbose:
                 print(f"Injection max of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[1]:.4f},{popt[2]:.4f}) mrad; flux = {popt[0]:.4g}")
 
-        params = np.array(params)
-        pcovs = np.array(pcovs)
-        seg_max = params[:,1:3] # x and y coordinates
-
-        # Find balanced injection
-        balanced_ptt = {}
-
-        ## Identify the weakest beam
-        weak_beam_idx = np.argmin(params[:,0])
-        beams_idx = [i for i in range(params[:,0].size)]
-
-        weak_offset = params[weak_beam_idx,-1]
-        weak_amplitude = params[weak_beam_idx,0]
-
-        # For the 3 other beams...
-        balanced_tt = []
-        balanced_flux = []
-        balanced_interp = []
-
-        for i in beams_idx:
-            param = params[i]
-            if i != weak_beam_idx:
-                # ...trace a line in the TT map from the max of injection and no injection
-                # line equation is: y = slope * (x - x0) + y0
-                slope = (param[1] - off_tip) / (param[2] - off_tilt)
-                intersect = param[1]
-
-                # Solve the equation B + A * exp(-(x-x0)**2 / (2 * Sigma**2)) = B_min + A_min
-                # where _min is the weakest beam properties
-                cste = (weak_offset - param[-1] + weak_amplitude) / param[0]
-                Sigma2 = sigma2_of_twoD_Gaussian_slice(param[0], param[2], param[3], param[4],
-                                                       param[5], param[6], slope)
-                tilt_b = param[2] - (2 * Sigma2 * np.log(1/cste))**0.5
-
-                tip_b = slope * (tilt_b - off_tilt) + intersect
-                flux_b = twoD_Gaussian((tilt_b, tip_b), *param)[0]
-            else:
-                tip_b = param[1]
-                tilt_b = param[2]
-                flux_b = twoD_Gaussian((tilt_b, tip_b), *param)[0]
-
-            flux_interp = interpn((tilt_grid, tip_grid), flux[i], (tilt_b, tip_b), method='linear')[0]
-
-            balanced_tt.append([tip_b, tilt_b])
-            balanced_flux.append(flux_b)
-            balanced_interp.append(flux_interp)
-
-            balanced_ptt[str(injection_seg_indices[i])] = [piston_nm, tip_b, tilt_b]
-
-            if verbose:
-                print(f"Balanced injection of seg={injection_seg_indices[i]}: (tip, tilt) = ({tip_b:.4f},{tilt_b:.4f}) mrad; flux = {flux_b:.4g}; interp = {flux_interp:.4g}")
-
-        balanced_tt = np.array(balanced_tt)
-        balanced_flux = np.array(balanced_flux)
-        balanced_interp = np.array(balanced_interp)
-
-        # Plot
-        if plot:
-            import matplotlib.pyplot as plt
-            plt.figure(figsize=(10, 10))
-            for i in range(len(injection_seg_indices)):
-                plt.subplot(2, 2, i+1)
-                plt.title('Seg '+str(injection_seg_indices[i]))
-                plt.imshow(flux[i], origin='lower', cmap='jet',
-                        extent=[-ttamp-tilt_step/2, ttamp+tilt_step/2,
-                                -ttamp-tip_step/2, ttamp+tip_step/2],
-                        vmin=flux.min(),
-                        vmax=flux.max())
-                plt.colorbar()
-                plt.scatter(seg_max[i,1], seg_max[i,0], c='w', marker='+', s=100, label='tt_max')
-                plt.scatter(balanced_tt[i, 1], balanced_tt[i, 0], marker='o', c='w', s=55, label=f"tt_bal (f={balanced_flux[i]:.3g})")
-                plt.scatter(balanced_tt[i, 1], balanced_tt[i, 0], marker='o', c='w', s=55, label=f"tt_bal (f={balanced_interp[i]:.3g})")
-                plt.xlabel('Tilt (mrad)')
-                plt.ylabel('Tip (mrad)')
-            plt.tight_layout()
-            plt.savefig(path / 'TT_map.png', dpi=150, format='png')
-
-        # Persist only the calibrated PTT maps as requested.
-        # Batch updates to avoid creating multiple backups.
-        # self._set_ptt_map('dm.ptt_max', max_ptt, autosave=False)
-        # self._set_ptt_map('dm.ptt_balanced', balanced_ptt, autosave=False)
-
-        # Single save at the end
-        # phobos.config.save_to_file()
-
-        print("✅ Injection calibration saved to config under dm.ptt_max and dm.ptt_balanced")
-        return {'max': max_ptt, 'balanced': balanced_ptt}
-
-    def calibrate_injection3(self,
-        grid_n: int = 31,
-        ttamp: float = 3.0,
-        piston_nm: float = -1150.0,
-        avg_frames: int = 1,
-        use_tqdm: bool = True,
-        plot: bool = True,
-        off_tip: float = 0.,
-        off_tilt: float = -5.47,
-        verbose: bool = True
-        ):
-
-        import phobos
-        from scipy.optimize import curve_fit
-        from scipy.interpolate import interp1d, interpn
-
-
-        def twoD_Gaussian(xy, amplitude, yo, xo, sigma_y, sigma_x, theta, offset):
-            x, y = xy
-            xo = float(xo)
-            yo = float(yo)
-            a = (np.cos(theta)**2)/(2*sigma_x**2) + (np.sin(theta)**2)/(2*sigma_y**2)
-            b = -(np.sin(2*theta))/(4*sigma_x**2) + (np.sin(2*theta))/(4*sigma_y**2)
-            c = (np.sin(theta)**2)/(2*sigma_x**2) + (np.cos(theta)**2)/(2*sigma_y**2)
-            g = offset + amplitude*np.exp( - (a*((x-xo)**2) + 2*b*(x-xo)*(y-yo)
-                                    + c*((y-yo)**2)))
-            return g.ravel()
-        
-        def phys_to_pixel(phys_point, extent, steps):
-            """
-            Convert physical coordinates to discrete pixel grid indices.
-        
-            Parameters
-            ----------
-            phys_point : tuple or list of float
-                The (y, x) coordinates of the point in physical space.
-            extent : tuple or list of float
-                The boundaries of the physical space as (y_min, y_max, x_min, x_max).
-            steps : tuple or list of float
-                The resolution or cell size (step_y, step_x) of each pixel
-                in physical units.
-        
-            Returns
-            -------
-            row : int
-                The vertical grid index (calculated from y_phys).
-            col : int
-                The horizontal grid index (calculated from x_phys).
-        
-            Notes
-            -----
-            The mapping assumes that the pixel indices increase in the same direction
-            as the physical coordinates. This function uses truncation (casting to int)
-            to determine the index.
-            """
-            y_phys, x_phys = phys_point
-            y_min, y_max, x_min, x_max = extent
-            stepy, stepx = steps
-        
-            col = (x_phys - x_min) / stepx
-            row = (y_phys - y_min) / stepy
-        
-            return int(round(row)), int(round(col))
-        
-        def pixel_to_phys(pixel_points, intersect, step):
-            """
-                Convert discrete pixel indices to continuous physical coordinates.
-            
-                Parameters
-                ----------
-                pixel_points : tuple of int or ndarray
-                    The pixel grid indices. Can be single dimension
-                intersects : tuple of float
-                    The physical origin or intercept value
-                    corresponding to pixel index 0.
-                steps : tuple of float
-                    The physical size or spacing of a single pixel.
-            
-                Returns
-                -------
-                phys : float or ndarray
-                    The calculated physical coordinate(s).
-            
-                Notes
-                -----
-                This transformation follows the linear model:
-                $Physical = (Pixel \times Step) + Intercept$
-                """            
-            phys = pixel_points * step + intersect
-            
-            return phys
-        
-
-        path = phobos.archive.new("injection_scan")
-
-        injection_seg_indices = self._parse_injection_segments(None)
-
-        # Scan parameters (single scan per segment)
-        tip_grid, tip_step = np.linspace(-float(ttamp), float(ttamp), int(grid_n), retstep=True)
-        tilt_grid, tilt_step = np.linspace(-float(ttamp), float(ttamp), int(grid_n), retstep=True)
-
-        # Optional tqdm progress bar
-        iterator = injection_seg_indices
-        if use_tqdm:
-            try:
-                from tqdm import tqdm  # type: ignore
-
-                iterator = tqdm(injection_seg_indices, desc="Calibrating injection", leave=True)
-            except Exception:
-                iterator = injection_seg_indices
-
-        camera = phobos.Cred3()
-
-        # # Off on 4 apertures
-        # [self.segments[seg].set_ptt(piston_nm, off_tip, off_tilt) for seg in injection_seg_indices]
-        # print('TT off+piston the 4 segments')
-
-        # # Do scan
-        # tt_flux = []
-        # for seg in iterator:
-        #     temp1 = []
-        #     for tip in tip_grid:
-        #         temp2 = []
-        #         for tilt in tilt_grid:
-        #             self.segments[seg].set_ptt(piston_nm, tip, tilt)
-        #             flx = np.zeros_like(camera.get_outputs(True, 'mean'))
-        #             for k in range(avg_frames):
-        #                 flx0 = camera.get_outputs(True, 'mean')
-        #                 flx = flx + flx0
-        #             flx /= float(avg_frames)
-        #             temp2.append(flx)
-        #         temp1.append(temp2)
-        #     tt_flux.append(temp1)
-        #     self.segments[seg].set_ptt(piston_nm, off_tip, off_tilt)
-
-        # tt_flux = np.array(tt_flux) # Axes (Beams, tip, tilt, framey, framex)
-        # [self.segments[seg].set_ptt(piston_nm, 0., 0.) for seg in injection_seg_indices]
-        # print('Flat+piston the 4 segments')
-
-        # Process data
-        # flux = np.sum(tt_flux, axis=-1)
-        flux = np.load('/media/photonics/SSD 128Go/data/2026-02-12/001/flx_deleteme.npy')
-
-        # Find max injection
-        max_ptt = {}
-
-        x, y = np.meshgrid(tilt_grid, tip_grid)
-        params = []
-        pcovs = []
-
-        for i in range(flux.shape[0]):
-            output = flux[i]
-            initial_guess = [output.max(), 0., 0., 1., 1., 0., 0.]
-            try:
-                popt, pcov = curve_fit(twoD_Gaussian, (x, y), output.ravel(), p0=initial_guess)
-            except RuntimeError as e:
-                print(i, e)
-                popt = np.zeros((len(initial_guess),))
-                pcov = np.zeros((len(initial_guess), len(initial_guess)))
-            params.append(popt)
-            pcovs.append(pcov)
-
-            max_ptt[str(injection_seg_indices[i])] = [piston_nm, popt[1], popt[2]]
-
-            if verbose:
-                print(f"Injection max of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[1]:.4f},{popt[2]:.4f}) mrad; flux = {popt[0]:.4g}")
-        
         print('')
 
         params = np.array(params)
@@ -835,11 +729,11 @@ class DM(metaclass=Singleton):
         # Find balanced injection
         balanced_ptt = {}
 
-        ## Identify the weakest beam
+        # Identify the weakest beam
         weak_beam_idx = np.argmin(flux.max((1,2)))
         weak_beam_flux = np.min(flux.max((1,2)))
         beams_idx = np.arange(params[:,0].size)
-        
+
         print('***', weak_beam_flux)
 
         # For the 3 other beams...
@@ -849,51 +743,60 @@ class DM(metaclass=Singleton):
         for i in beams_idx:
             param = params[i]
             if i != weak_beam_idx:
-                """
-                We will slice the TT map along tilt axis at the tip of maximum injection.
-                We keep the tilt parts from the minimum value of the grid to the tilti at maximum injection.
-                """
-                
-                # Identification of the pixel of max injection at the grid accuracy
-                max_node = [param[1], param[2]] # tip (row) and tilt (column), in mrad
-                
-                extent = (tip_grid.min(), tip_grid.max(), tilt_grid.min(), tilt_grid.max())
-                steps = (tip_step, tilt_step)
-                max_node_px = phys_to_pixel(max_node, extent, steps)
-                
-                # Pixel where the maximum injection is in mrad units
-                max_node2 = pixel_to_phys(max_node_px[1], tilt_grid.min(), tilt_step)
-                
-                # We slice the TT map at the row of max injection and
-                # slice the columns between the minimum grid (idx 0) and the column of max injection
-                slice_tilt = tilt_grid[tilt_grid <= max_node2]
-                profile = interpn((tip_grid, tilt_grid), flux[i], (max_node[0], slice_tilt), method='cubic')
+                # we locate the closest TT pixel from the balanced value
+                image = flux[i]
+                cost_fun = np.abs(image - weak_beam_flux)
+                idx_closest = np.unravel_index(np.argmin(cost_fun), cost_fun.shape)
 
-                # We locate the seeked balanced flux between 2 pixels
-                px_lower = np.where(profile <= weak_beam_flux)[0][-1]
-                px_higher = np.where(profile > weak_beam_flux)[0][0]
-                
-                tilt_low, flx_low = slice_tilt[px_lower], profile[px_lower]
-                tilt_high, flx_high = slice_tilt[px_higher], profile[px_higher]
-                
-                # We make a linear interpolation between these two pixels to get the tilt for balanced value
+                # We crop a 3x3 area around this pixel
+                crop = image[idx_closest[0]-1:idx_closest[0]+2, idx_closest[1]-1:idx_closest[1]+2].copy()
+                slice_tilt = tilt_grid[idx_closest[1]-1:idx_closest[1]+2]
+                slice_tip = tip_grid[idx_closest[0]-1:idx_closest[0]+2]
+
+                # We look for the other closest pixel along the tip or tilt axis
+                # We make sure the diagonal pixels cannot be seleted (because they are hard to interpolate)
+                crop[0,0] = crop[-1, -1] = crop[0, -1] = crop[-1, 0] = -np.inf
+
+                # The 2nd closest pixel from balanced value can be immediately below or above
+                # depending on whether the 1st closest value was already above or below the balanced value
+                if crop[1,1] > weak_beam_flux:
+                    px_higher = [1,1]
+                    mask = np.where(crop <= weak_beam_flux)
+                    idx = np.argmax(crop[np.where(crop <= weak_beam_flux)])
+                    px_lower = [mask[0][idx], mask[1][idx]]
+                else:
+                    px_lower = [1,1]
+                    mask = np.where(crop > weak_beam_flux)
+                    idx = np.argmin(crop[np.where(crop > weak_beam_flux)])
+                    px_higher = [mask[0][idx], mask[1][idx]]
+
+                # We will interpolate between these pixels
+                flx_low = crop[*px_lower]
+                flx_high = crop[*px_higher]
+
+                tilt_low = slice_tilt[px_lower[1]]
+                tilt_high = slice_tilt[px_higher[1]]
+                tip_low = slice_tip[px_lower[0]]
+                tip_high = slice_tip[px_higher[0]]
+
                 interp_tilt = interp1d([flx_low, flx_high], [tilt_low, tilt_high])
-                
+                interp_tip = interp1d([flx_low, flx_high], [tip_low, tip_high])
+
                 tilt_b = interp_tilt(weak_beam_flux)
-                tip_b = max_node[0]
-                flux_b = interpn((tilt_grid, tip_grid), flux[i], (tip_b, tilt_b), method='cubic')[0]
+                tip_b = interp_tip(weak_beam_flux)
             else:
-                tip_b = param[1]                
+                tip_b = param[1]
                 tilt_b = param[2]
-                flux_b = weak_beam_flux
-            
+
+            # We interpolate the flux to estimate the balanced value
+            flux_b = interpn((tilt_grid, tip_grid), flux[i], (tip_b, tilt_b), method='cubic')[0]
             balanced_tt.append([tip_b, tilt_b])
             balanced_flux.append(flux_b)
 
             balanced_ptt[str(injection_seg_indices[i])] = [piston_nm, tip_b, tilt_b]
 
             if verbose:
-                print(f"Balanced injection of seg={injection_seg_indices[i]}: (tip, tilt) = ({tip_b:.4f},{tilt_b:.4f}) mrad; flux = {flux_b:.5g}")
+                print(f"Balanced injection of seg={injection_seg_indices[i]}: (tip, tilt) = ({tip_b:.4f},{tilt_b:.4f}) mrad; flux = {flux_b:.8g}")
 
         balanced_tt = np.array(balanced_tt)
         balanced_flux = np.array(balanced_flux)
@@ -1392,7 +1295,7 @@ class Segment():
         # Check if channel is valid
         if not (0 <= id <= DM.N_SEGMENTS):
              raise ValueError(f"❌ Invalid channel number {id}. Must be between 1 and {DM.N_SEGMENTS}.")
-             
+
         # Return cached instance if it exists
         if id not in cls._instances:
             cls._instances[id] = super(Segment, cls).__new__(cls)
@@ -1505,7 +1408,7 @@ class Segment():
             )
 
         return self.set_piston(piston_target)
-    
+
     def get_piston(self) -> float:
         """
         Get the piston value of the segment.
@@ -1645,7 +1548,7 @@ class Segment():
         self.tilt = tilt
         response = DM().bmcdm.set_segment(self.id, self.piston, self.tip, self.tilt, True, True)
         time.sleep(Config().get('dm.stabilization_time'))  # Stabilization delay for BMC hardware
-        return response        
+        return response
 
     def get_ptt(self) -> tuple[float, float, float]:
         """
@@ -1660,6 +1563,10 @@ class Segment():
         float
             The tilt value of the segment in milliradians.
         """
-        
+
         # Inline conversion faster than method calls
         return self.piston, self.tip * 1000.0, self.tilt * 1000.0
+
+if __name__ == "__main__":
+    dm = DM()
+    dm.calibrate_injection2()
