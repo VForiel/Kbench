@@ -471,7 +471,7 @@ class DM(metaclass=Singleton):
         plot: bool = True,
         off_tip: float = 0.,
         off_tilt: float = -5.47,
-        verbose: bool = True
+        verbose: bool = False
         ):
 
         """
@@ -511,7 +511,7 @@ class DM(metaclass=Singleton):
             Default is -5.47.
         verbose : bool, optional
             If True, prints calibration details (max flux, coordinates) to the
-            console. Default is True.
+            console. Default is False.
 
         Returns
         -------
