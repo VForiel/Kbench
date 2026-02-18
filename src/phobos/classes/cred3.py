@@ -419,6 +419,43 @@ class Cred3(metaclass=Singleton):
         
         return dark_mean
     
+    def check_cropping(self, subtract_dark: bool = True):
+        """
+        Display the cropped output regions to verify they well capture the output signals.
+        
+        Acquires a frame and shows each cropped output as a subplot
+        with a shared color scale, useful for checking that ``output_centers``
+        and ``output_sizes`` are correctly configured.
+        
+        Parameters
+        ----------
+        subtract_dark : bool, optional
+            Whether to subtract the dark frame. Default is True.
+        
+        Examples
+        --------
+        >>> camera = Cred3()
+        >>> camera.check_cropping()
+        """
+        import matplotlib.pyplot as plt
+        
+        img = self.get_image(subtract_dark=subtract_dark)
+        crops = self.crop_outputs_from_image(img)
+        
+        n = len(crops)
+        ncols = 1 if n == 1 else 2
+        nrows = (n + ncols - 1) // ncols
+        vmax = max(crop.max() for crop in crops)
+        
+        plt.figure(figsize=(10, 10))
+        for i, crop in enumerate(crops):
+            plt.subplot(nrows, ncols, i + 1)
+            plt.title(f'Beam {i + 1}')
+            plt.imshow(crop, origin='lower', cmap='jet', vmin=0, vmax=vmax)
+            plt.colorbar()
+        plt.tight_layout()
+        plt.show()
+    
     def close(self):
         """
         Close the shared memory connections.
