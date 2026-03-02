@@ -2,7 +2,7 @@
 
 This repo aim to provide a full set of tools to control all the devices on the Kernel-Nuller test bench.
 
-> **⚠️ Important:** This package is designed to run on the PHOTONICS lab PC with specific hardware (BMC deformable mirror, Thorlabs filter wheel, Newport/Zaber motors, C-RED3 camera). Outside this environment, the library will automatically enter **sandbox mode** and simulate missing components with mock interfaces. See the [installation guide](https://phobos-controls.readthedocs.io/en/latest/installation.html) for proper lab PC setup.
+> **⚠️ Important:** This package is designed to run on the PHOTONICS lab PC with specific hardware (BMC deformable mirror, Thorlabs filter wheel, Newport/Zaber motors, C-RED3 camera). Outside this environment, the library will automatically enter **sandbox mode** and simulate missing components with mock interfaces. See the [installation guide](https://phob.readthedocs.io/en/latest/installation.html) for proper lab PC setup.
 
 ## 🚀 Quickstart
 
