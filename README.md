@@ -11,7 +11,7 @@ Requirements:
 
 ### Lab PC Installation (with hardware)
 
-For the lab PC with all hardware connected, follow the complete [installation guide](https://phobos-controls.readthedocs.io/en/latest/installation.html).
+For the lab PC with all hardware connected, follow the complete [installation guide](https://phob.readthedocs.io/en/latest/installation.html).
 
 Quick version:
 ```bash
@@ -31,7 +31,7 @@ The package will automatically detect missing hardware and run in **sandbox mode
 
 ## 📚 Documentation
 
-The documentation should be available at the adress: [phobos-controls.readthedocs.io](http://phobos-controls.readthedocs.io).
+The documentation should be available at the adress: [phob.readthedocs.io](http://phob.readthedocs.io).
 
 If you want to build the doc locally, once the project is setup (according to the instructions above):
 
