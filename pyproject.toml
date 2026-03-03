@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "phob"
 version = "0.8.0"
@@ -6,12 +10,7 @@ authors = [
     {name = "Vincent Foriel", email = "vincent.foriel@gmail.com"},
     {name = "mmartinod", email = "ma.martinod@free.fr"},
 ]
-dependencies = [
-    "numpy",
-    "pyserial",
-    "pyyaml",
-    "toml>=0.10.2",
-]
+dynamic = ["dependencies"]
 requires-python = ">=3.9"
 readme = "README.md"
 license = {text = "MIT"}
@@ -27,16 +26,15 @@ classifiers = [
 [project.scripts]
 phob = "phobos.scripts.cli:main"
 
-[build-system]
-requires = ["setuptools>=64", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["phobos*"]
+include = ["phobos*", "bmc*"]
 
 [tool.setuptools.package-data]
 "bmc" = ["*.so"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
