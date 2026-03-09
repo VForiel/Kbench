@@ -354,7 +354,7 @@ class PhaseShifter:
         Examples
         --------
         >>> ch = PhaseShifter(17)
-        >>> ch.dac_calibration(verbose=True)
+        >>> ch.power_dac_calibration(verbose=True)
         >>> ch.set_power(0.6)  # Now uses calibrated coefficient
         """
 

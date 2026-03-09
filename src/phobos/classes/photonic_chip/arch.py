@@ -386,7 +386,7 @@ class _Arch:
             print(f"🔧 Calibrating DAC for {len(self.shifters)} shifters in {self.name}...")
         
         for shifter in self.shifters:
-            shifter.dac_calibration(plot=plot, verbose=verbose)
+            shifter.power_dac_calibration(plot=plot, verbose=verbose)
         
         if verbose:
             print(f"✅ DAC calibration completed for {self.name} (shifters {list(self.topas)}).")
