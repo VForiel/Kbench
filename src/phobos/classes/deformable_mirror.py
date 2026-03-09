@@ -1376,38 +1376,22 @@ class Segment():
         -------
         str
             Hardware response string from the DM controller.
-
-        Warns
-        -----
-        UserWarning
-            If the target piston is outside the configured piston range.
         """
-        lam_nm = float(lam)
-        phi = float(phase) % (2 * np.pi)
 
-        pr = Config().get('dm.piston_range')
-        if pr is None or len(pr) != 2:
-            raise ValueError("Config key 'dm.piston_range' must be a 2-element list [min_nm, max_nm]")
+        # Get corresponding distance
+        distance = phase * lam / (2 * np.pi)
 
-        p_min, p_max = float(pr[0]), float(pr[1])
-        p0 = int(0.5 * (p_min + p_max))
+        # Get zero position
+        zero = int(np.mean(Config().get('dm.piston_range')))
 
-        # Map phase to piston offset in [-lam/2, +lam/2)
-        # so that 0..pi produces negative offset and pi..2pi produces positive.
-        delta_nm = -((phi / (2 * np.pi)) * lam_nm)
-        if phi > np.pi:
-            delta_nm = lam_nm - ((phi / (2 * np.pi)) * lam_nm)
+        # Position to set
+        position = zero + distance
 
-        piston_target = p0 + float(delta_nm)
+        # Check if position is within range
+        if position < Config().get('dm.piston_range')[0] or position > Config().get('dm.piston_range')[1]:
+            raise ValueError(f"Position {position} is outside the configured range")
 
-        if piston_target < p_min or piston_target > p_max:
-            warnings.warn(
-                f"Requested piston {piston_target:.1f} nm is outside configured range [{p_min:.1f}, {p_max:.1f}] nm for segment {self.id}.",
-                UserWarning,
-                stacklevel=2,
-            )
-
-        return self.set_piston(piston_target)
+        return self.set_piston(position)
 
     def get_piston(self) -> float:
         """
