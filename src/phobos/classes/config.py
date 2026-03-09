@@ -247,10 +247,10 @@ class Config:
             self._config_data = new_data
             
             # Import copies the data into the MAIN config file
-            self.config_path = os.path.join(self.root_dir, 'config', 'bench.yml')
+            self.path = os.path.join(self.root_dir, 'config', 'bench.yml')
             
             print(f"✅ Configuration data loaded from {path}")
-            print(f"   Targeting main config file: {self.config_path}")
+            print(f"   Targeting main config file: {self.path}")
             
             # Persist the imported data to the main config file
             self.backup()
@@ -283,10 +283,10 @@ class Config:
         Create a backup of the current config file in config/history.
         Format: YYYY-MM-DD-hh-mm-<commit_id>_N.yml
         """
-        if not os.path.exists(self.config_path):
+        if not os.path.exists(self.path):
             return
 
-        history_dir = os.path.join(os.path.dirname(self.config_path), 'history')
+        history_dir = os.path.join(os.path.dirname(self.path), 'history')
         os.makedirs(history_dir, exist_ok=True)
 
         # Get Commit ID
@@ -322,17 +322,17 @@ class Config:
         backup_path = os.path.join(history_dir, backup_filename)
         
         try:
-            shutil.copy2(self.config_path, backup_path)
+            shutil.copy2(self.path, backup_path)
         except Exception as e:
             print(f"⚠️ Could not create config backup: {e}")
 
     def _load_from_file(self):
         """Load YAML file."""
-        if not os.path.exists(self.config_path):
+        if not os.path.exists(self.path):
             return {}
             
         try:
-            with open(self.config_path, 'r') as f:
+            with open(self.path, 'r') as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
             print(f"❌ Error loading config file: {e}")
@@ -342,7 +342,7 @@ class Config:
         """Save current config data to YAML file."""
         self.backup()
         try:
-            with open(self.config_path, 'w') as f:
+            with open(self.path, 'w') as f:
                 yaml.dump(self._config_data, f, default_flow_style=False)
         except Exception as e:
             print(f"❌ Error saving config file: {e}")
@@ -352,4 +352,4 @@ class Config:
         return self._config_data.copy()
 
     def __repr__(self):
-        return f"<Config path='{self.config_path}' keys={list(self._config_data.keys())}>"
+        return f"<Config path='{self.path}' keys={list(self._config_data.keys())}>"
