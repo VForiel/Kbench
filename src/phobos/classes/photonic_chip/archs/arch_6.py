@@ -640,13 +640,15 @@ class Arch6(Arch, metaclass=Singleton):
             nulls = np.delete(outs, int(bright_output))
 
             max_null = np.max(nulls)
+            sum_null = np.sum(nulls)
             
-            if total_flux is not None:
-                metric = max_null / (total_flux - np.sum(nulls))  # Avoid using bright output if total flux is known to prevent saturation issues
-            else:
-                metric = max_null / b_meas
+            #if total_flux is not None:
+            #    metric = max_null / (total_flux - np.sum(nulls))  # Avoid using bright output if total flux is known to prevent saturation issues
+            #else:
+            #    metric = max_null / b_meas
 
-            metric = max_null
+            #metric = max_null
+            metric = sum_null
 
             if ret_outputs:
                 return metric, b_meas, nulls

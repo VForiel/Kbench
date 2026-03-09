@@ -1566,7 +1566,3 @@ class Segment():
 
         # Inline conversion faster than method calls
         return self.piston, self.tip * 1000.0, self.tilt * 1000.0
-
-if __name__ == "__main__":
-    dm = DM()
-    dm.calibrate_injection2()

@@ -3,14 +3,22 @@ import yaml
 import shutil
 import glob
 import subprocess
+import copy
 from datetime import datetime
+import shutil
 
 
 class Config:
     """
     Singleton configuration class for PHOBos.
     Interfaces with the 'config/bench.yml' file.
-    
+
+    Parameters
+    ----------
+    path : str, optional
+        Path to the configuration file. If not provided, defaults to
+        './config/bench.yml'.
+
     Usage:
     >>> from phobos import config
     >>> print(config.get('cred3.semid'))
@@ -29,7 +37,7 @@ class Config:
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, config_path=None):
+    def __init__(self, path=None):
         if self._initialized:
             return
             
@@ -39,10 +47,13 @@ class Config:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         self.root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
         
-        if config_path is None:
-            self.config_path = os.path.join(self.root_dir, 'config', 'bench.yml')
+        if path is None:
+            self.path = os.path.join(self.root_dir, 'config', 'bench.yml')
+            if not os.path.exists(self.path):
+                # Copy from bench_template.yml
+                shutil.copy(os.path.join(self.root_dir, 'config', 'bench_template.yml'), self.path)
         else:
-            self.config_path = config_path
+            self.path = path
 
         self.reload()
 
@@ -81,7 +92,7 @@ class Config:
                     val = val[k]
                 else:
                     return default
-            return val
+            return copy.deepcopy(val)
         except (KeyError, TypeError):
             return default
 

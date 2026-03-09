@@ -377,15 +377,15 @@ class Cred3(metaclass=Singleton):
         
         print(f"Taking {nb_frames} dark frames...")
         
-        # Catch up with semaphore before starting
-        self.cam.catch_up_with_sem(self.semid)
-        
         # Acquire frames
         iterator = tqdm(range(nb_frames)) if use_tqdm else range(nb_frames)
         images = np.zeros_like(self.cam.get_latest_data(self.semid))
+
+        # Catch up with semaphore before starting
+        self.cam.catch_up_with_sem(self.semid)
+
         for ii in iterator:
             img = self.cam.get_latest_data(self.semid)
-            # images.append(img)
             images += img 
             semval = self.cam.sems[self.semid].value
             log_sem.append(semval)
