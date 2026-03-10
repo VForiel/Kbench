@@ -391,7 +391,7 @@ class _Arch:
         if verbose:
             print(f"✅ DAC calibration completed for {self.name} (shifters {list(self.topas)}).")
     
-    def phase_calibration(self, samples: int = 100, plot: bool = False, verbose: bool = False):
+    def phase_calibration(self, samples: int = 100, plot: bool = False, verbose: bool = False, return_metadata: bool = False):
         """
         Calibrate phase-to-power conversion coefficients for all shifters in this chip.
         
@@ -407,6 +407,15 @@ class _Arch:
             If True, plot the fitted curves. Default is False.
         verbose : bool, optional
             If True, print calibration details. Default is False.
+        
+        Returns
+        -------
+        np.ndarray
+            Array of measured output fluxes for each shifter during the scan.
+        dict, optional
+            If return_metadata is True, also returns a dict with metadata including the following keys:
+            - "figure1": The calibration plot figure (if plot=True)
+            - "figure2": The phase scan verification plot figure (if plot=True)
         """
 
         power_range = np.linspace(0, 1, samples) # Power from 0 to 1W
@@ -630,7 +639,14 @@ class _Arch:
         if verbose:
             print("✅ Phase calibration completed.")
 
-        return np.array(out_fluxes)
+        if not return_metadata:
+            return np.array(out_fluxes)
+        else:
+            return np.array(out_fluxes),
+            {
+                'figure1' : fig if plot else None,
+                'figure2' : fig2 if plot else None,
+            }
 
     def characterize(self, phase_samples=51, n_averages=10, plot=True, verbose=True):
         """
