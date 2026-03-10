@@ -642,8 +642,7 @@ class _Arch:
         if not return_metadata:
             return np.array(out_fluxes)
         else:
-            return np.array(out_fluxes),
-            {
+            return np.array(out_fluxes), {
                 'figure1' : fig if plot else None,
                 'figure2' : fig2 if plot else None,
             }

@@ -5,11 +5,13 @@ import time
 import warnings
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from copy import deepcopy as copy
 
 from .. import bmc
 
 from ..utils import Singleton
 from .config import Config
+from .cred3 import Cred3
 
 class DM(metaclass=Singleton):
     """
@@ -826,13 +828,8 @@ class DM(metaclass=Singleton):
             plt.tight_layout()
             plt.savefig(path / 'TT_map.png', dpi=150, format='png')
 
-        # Persist only the calibrated PTT maps as requested.
-        # Batch updates to avoid creating multiple backups.
-        # self._set_ptt_map('dm.ptt_max', max_ptt, autosave=False)
-        # self._set_ptt_map('dm.ptt_balanced', balanced_ptt, autosave=False)
-
-        # Single save at the end
-        # phobos.config.save_to_file()
+        Config().set('dm.ptt_max', max_ptt)
+        Config().set('dm.ptt_balanced', balanced_ptt)
 
         print("✅ Injection calibration saved to config under dm.ptt_max and dm.ptt_balanced")
         return {'max': max_ptt, 'balanced': balanced_ptt}
@@ -1230,6 +1227,219 @@ class DM(metaclass=Singleton):
 
         print("✅ Injection calibration saved to config under dm.ptt_max and dm.ptt_balanced")
         return {'max': max_ptt, 'balanced': balanced_ptt, 'figure': fig}
+    
+    def calibrate_injection3(self,
+        grid_n: int = 31,
+        ttamp: float = 3.0,
+        plot: bool = True,
+        tip_tilt_min = 1e-3,
+        verbose: bool = False
+        ):
+
+        """
+        ToDo
+
+        Parameters
+        ----------
+        grid_n : int, optional
+            The number of points in one dimension of the square scan grid.
+            The total number of measurements per segment will be ``grid_n**2``.
+            Default is 31.
+        ttamp : float, optional
+            The amplitude of the tip/tilt scan in physical units (typically mrad).
+            The scan ranges from ``-ttamp`` to ``+ttamp``. Default is 3.0.
+        plot : bool, optional
+            If True, generates and saves a diagnostic plot ('TT_map.png') showing
+            the flux maps, fitted peaks, and balanced positions. Default is True.
+        tip_tilt_min : float, optional
+            The minimum possible tip/tilt step angle (mrad). Default is 1e-3.
+        verbose : bool, optional
+            If True, prints calibration details (max flux, coordinates) to the
+            console. Default is False.
+
+        Returns
+        -------
+        dict
+            A dictionary containing calibration results with two keys:
+
+            * **'max'**: A dictionary mapping segment IDs to their optimal [piston, tip, tilt]
+              coordinates (calculated via Gaussian fit).
+            * **'balanced'**: A dictionary mapping segment IDs to the [piston, tip, tilt]
+              coordinates that result in a flux equal to the weakest beam's maximum.
+        """
+
+        # Scan tip/tilt space -------------------------------------------------
+
+        segs = Config().get('dm.injection_segments')
+        zero_piston = int(np.mean(Config().get('dm.piston_range')))
+
+        tt_ramp = np.linspace(-ttamp, ttamp, grid_n)
+        injection_maps = np.empty((4, grid_n, grid_n))
+
+        for s, seg in enumerate(segs):
+
+            if verbose: print("Scanning tip/tilt space on segment", seg)
+
+            # Cutting injection on other segments
+            mask = list(range(len(segs)))
+            mask.remove(s)
+            self.off(np.array(mask)+1)
+
+            # Build injection maps
+            for i, tip in enumerate(tt_ramp):
+                for j, tilt in enumerate(tt_ramp):
+                    self.segments[seg].set_ptt(zero_piston, tip, tilt)
+                    total_flux = np.sum(Cred3().get_outputs(flux_mode="sum"))
+                    injection_maps[s, i, j] = total_flux
+
+        # Detect centroid using scikit ----------------------------------------
+        # Ref: https://scikit-image.org/docs/0.25.x/api/skimage.measure.html#skimage.measure.moments
+
+        if verbose: print("Detecting centroids...")
+
+        from skimage import measure
+
+        centroids = np.empty((4, 2))
+        for s in range(4):
+            image = injection_maps[s]
+            
+            m = measure.moments(image)
+            centroids[s] = (m[1, 0] / m[0, 0], m[0, 1] / m[0, 0])
+
+        # Convert centroid coordinates from pixels to mrad
+        mrad_per_pixel = 2*ttamp / (grid_n-1)
+        tt_max = centroids * mrad_per_pixel - ttamp
+
+        if verbose:
+            print("pixel:")
+            print(centroids)
+            print("mrad:")
+            print(tt_max)
+
+        # Get strongest tip/tilt coordinates and value ------------------------
+
+        if verbose: print("Getting strongest fluxes...")
+
+        strong_fluxes = np.empty(len(segs))
+
+        for s, seg in enumerate(segs):
+
+            # Cutting injection on other segments
+            mask = list(range(len(segs)))
+            mask.remove(s)
+            self.off(np.array(mask)+1)
+
+            # Measure total flux at strongest tip/tilt
+            self.segments[seg].set_ptt(zero_piston, *tt_max[s])
+            flux = np.sum(Cred3().get_outputs(flux_mode="sum"))
+            strong_fluxes[s] = flux
+
+        if verbose:
+            print(strong_fluxes)
+
+        # Get weakest maximum -------------------------------------------------
+
+
+        if verbose: print("Getting weakest flux...")
+
+        weak_seg = None
+        weak_flux = 0
+        for s, seg in enumerate(segs):
+
+            # Cutting injection on other segments
+            mask = list(range(len(segs)))
+            mask.remove(s)
+            self.off(np.array(mask)+1)
+
+            # Measure total flux at strongest tip/tilt
+            self.segments[seg].set_ptt(zero_piston, *tt_max[s])
+            flux = np.sum(Cred3().get_outputs(flux_mode="sum"))
+
+            # Compare and record weakest flux
+            if flux < weak_flux:
+                weak_flux = flux
+                weak_seg = seg
+                weak_s = s
+
+        if verbose: print(f"Weakest flux: {weak_flux}\nFound on segment {weak_seg}")
+
+        # Dichotomy to find balanced tilt -------------------------------------
+        
+        strong_segs = copy(segs)
+        strong_segs.remove(weak_seg)
+
+        tt_bal = copy(tt_max)
+
+        bal_fluxes = np.empty(len(segs))
+        bal_fluxes[weak_s] = weak_flux
+
+        for s, seg in enumerate(strong_segs):
+
+            if verbose: print(f"Dichotomy search on segment {seg}...")
+
+            # Cutting injection on other segments
+            mask = list(range(len(segs)))
+            mask.remove(s)
+            self.off(np.array(mask)+1)
+
+            step = ttamp / 2
+
+            while step > tip_tilt_min:
+                
+                # Measure total flux
+                self.segments[seg].set_ptt(zero_piston, *tt_bal[s])
+                flux = np.sum(Cred3().get_outputs(flux_mode="sum"))
+
+                relative_flux = flux - weak_flux
+
+                # Move in the direction of the gradient
+                if relative_flux > 0:
+                    tt_bal[s, 1] += step
+                else:
+                    tt_bal[s, 1] -= step
+
+                step /= 2
+
+        if verbose: 
+            print("Balance tip/tilt:")
+            print(tt_bal)
+            print("Balanced fluxes:")
+            print(bal_fluxes)
+
+        # Plot ----------------------------------------------------------------
+
+        if plot:
+            import matplotlib.pyplot as plt
+
+            fig, axs = plt.subplots(1, 4, figsize=(12, 4))
+
+            for s, ax in enumerate(axs):
+                ax.set_title(f"Input {s+1} (seg {segs[s]})")
+                ax.imshow(injection_maps[s], cmap='jet', origin='lower', extent=(-ttamp, ttamp, -ttamp, ttamp))
+                ax.scatter(*tt_max[s], color='green', marker='^', label=f"Max (f={strong_fluxes[s]:.2e})")
+                ax.scatter(*tt_bal[s], color='green', marker='o', label=f"Bal (f={bal_fluxes[s]:.2e})")
+                ax.set_ylabel("Tip (mrad)")
+                ax.set_xlabel("Tilt (mrad)")
+                ax.legend()
+
+            plt.tight_layout()
+            plt.show()
+        
+        # Save & return -------------------------------------------------------
+
+        # Build ptt dicts
+        max_dict = {str(seg): (zero_piston, tt_max[s][0], tt_max[s][1]) for s, seg in enumerate(segs)}
+        bal_dict = {str(seg): (zero_piston, tt_bal[s][0], tt_bal[s][1]) for s, seg in enumerate(segs)}
+
+        # Save to config
+        #Config().set('dm.ptt_max', max_dict)
+        #Config().set('dm.ptt_balanced', bal_dict)
+
+        return {
+            'tt_max': tt_max,
+            'tt_bal': tt_bal,
+            'figure': fig
+        }
 
     def balanced(self, segments=None):
         """Apply stored 'balanced' injection calibration (tip/tilt) for selected segments.
