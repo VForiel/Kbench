@@ -671,6 +671,7 @@ class DM(metaclass=Singleton):
         print('TT off+piston the 4 segments')
 
         # Do scan
+        print('Find max injection')
         tt_flux = []
         for seg in iterator:
             temp1 = []
@@ -726,7 +727,11 @@ class DM(metaclass=Singleton):
         pcovs = np.array(pcovs)
         seg_max = params[:,1:3] # x and y coordinates
 
+        print('Optimal injections: positions and widths')
+        print(params[:,1:5])
+
         # Find balanced injection
+        print('Find balanced positions')
         balanced_ptt = {}
 
         # Identify the weakest beam
@@ -782,11 +787,11 @@ class DM(metaclass=Singleton):
                 interp_tilt = interp1d([flx_low, flx_high], [tilt_low, tilt_high])
                 interp_tip = interp1d([flx_low, flx_high], [tip_low, tip_high])
 
-                tilt_b = interp_tilt(weak_beam_flux)
-                tip_b = interp_tip(weak_beam_flux)
+                tilt_b = float(interp_tilt(weak_beam_flux))
+                tip_b = float(interp_tip(weak_beam_flux))
             else:
-                tip_b = param[1]
-                tilt_b = param[2]
+                tip_b = float(param[1])
+                tilt_b = float(param[2])
 
             # We interpolate the flux to estimate the balanced value
             flux_b = interpn((tilt_grid, tip_grid), flux[i], (tip_b, tilt_b), method='cubic')[0]

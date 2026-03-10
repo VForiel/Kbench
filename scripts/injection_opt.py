@@ -198,11 +198,11 @@ if __name__ == '__main__':
     [dm.segments[seg].set_ptt(0, 0., 0.) for seg in active_segs0]
     print('All seg flat')
     
-    crop_size = 7 # px window around the output
-    crop_centers = np.array([(357, 271),
-                        (357, 256),
-                        (357, 240),
-                        (357, 225)])
+    crop_size = 13 # px window around the output
+    crop_centers = np.array([(315, 323),
+                        (346, 323),
+                        (378, 323),
+                        (409, 323)])
     
     # check_cropping(crop_centers, crop_size)
     # ppp
@@ -363,3 +363,32 @@ if __name__ == '__main__':
     [dm.segments[seg].set_ptt(0, 0., 0.) for seg in active_segs0]
     print('All Seg flat')
     sleep(wait_seg)
+    
+    # a = dm.calibrate_injection2()
+    # def check_max_bal(dictio):
+    #     camera = phobos.Cred3()
+    #     maxi = dictio['max']
+    #     out_maxi = []
+    #     for key, vals in maxi.items():
+    #         [dm.segments[int(k)].set_ptt(-1158, 0., -5.47) for k in maxi.keys()]
+    #         sleep(0.1)
+    #         dm.segments[int(key)].set_ptt(*vals)
+    #         sleep(0.1)
+    #         img = camera.get_image(subtract_dark=True)
+    #         sleep(0.1)
+    #         tt_cropped = camera.crop_outputs_from_image(img)#, crop_centers, crop_size)
+    #         tt_cropped = np.array(tt_cropped)
+    #         out_maxi.append(tt_cropped.sum())
+            
+    #     bali = dictio['balanced']
+    #     out_bali = []
+    #     for key, vals in bali.items():
+    #         [dm.segments[int(k)].set_ptt(-1158, 0., -5.47) for k in bali.keys()]
+    #         sleep(0.1)
+    #         dm.segments[int(key)].set_ptt(*vals)
+    #         sleep(0.1)
+    #         img = camera.get_image(subtract_dark=True)
+    #         sleep(0.1)
+    #         tt_cropped = camera.crop_outputs_from_image(img)#, crop_centers, crop_size)
+    #         tt_cropped = np.array(tt_cropped)
+    #         out_bali.append(tt_cropped.sum())
