@@ -228,7 +228,7 @@ class Config:
 
     def import_config(self, path):
         """
-        Load configuration from a specific file path and update current settings.
+        Load configuration from a specific file path.
         
         Parameters
         ----------
@@ -255,9 +255,6 @@ class Config:
             # Persist the imported data to the main config file
             self.backup()
             self._save_to_file()
-            
-            # Apply to hardware
-            self.apply()
             
         except Exception as e:
             print(f"❌ Error importing config: {e}")
