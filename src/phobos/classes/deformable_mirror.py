@@ -1270,10 +1270,12 @@ class DM(metaclass=Singleton):
 
         # Scan tip/tilt space -------------------------------------------------
 
+        if verbose: print("-"*10)
+
         segs = Config().get('dm.injection_segments')
         zero_piston = int(np.mean(Config().get('dm.piston_range')))
 
-        tt_ramp = np.linspace(-ttamp, ttamp, grid_n)
+        tt_ramp, mrad_per_pixel = np.linspace(-ttamp, ttamp, grid_n, retstep=True)
         injection_maps = np.empty((4, grid_n, grid_n))
 
         for s, seg in enumerate(segs):
@@ -1295,7 +1297,9 @@ class DM(metaclass=Singleton):
         # Detect centroid using scikit ----------------------------------------
         # Ref: https://scikit-image.org/docs/0.25.x/api/skimage.measure.html#skimage.measure.moments
 
-        if verbose: print("Detecting centroids...")
+        if verbose:
+            print("-"*10)
+            print("Detecting centroids...")
 
         from skimage import measure
 
@@ -1307,7 +1311,6 @@ class DM(metaclass=Singleton):
             centroids[s] = (m[1, 0] / m[0, 0], m[0, 1] / m[0, 0])
 
         # Convert centroid coordinates from pixels to mrad
-        mrad_per_pixel = 2*ttamp / (grid_n-1)
         tt_max = centroids * mrad_per_pixel - ttamp
 
         if verbose:
@@ -1318,7 +1321,9 @@ class DM(metaclass=Singleton):
 
         # Get strongest tip/tilt coordinates and value ------------------------
 
-        if verbose: print("Getting strongest fluxes...")
+        if verbose:
+            print("-"*10)
+            print("Getting strongest fluxes...")
 
         strong_fluxes = np.empty(len(segs))
 
@@ -1337,35 +1342,16 @@ class DM(metaclass=Singleton):
         if verbose:
             print(strong_fluxes)
 
-        # Get weakest maximum -------------------------------------------------
-
-
-        if verbose: print("Getting weakest flux...")
-
-        weak_seg = None
-        weak_flux = 0
-        for s, seg in enumerate(segs):
-
-            # Cutting injection on other segments
-            mask = list(range(len(segs)))
-            mask.remove(s)
-            self.off(np.array(mask)+1)
-
-            # Measure total flux at strongest tip/tilt
-            self.segments[seg].set_ptt(zero_piston, *tt_max[s])
-            flux = np.sum(Cred3().get_outputs(flux_mode="sum"))
-
-            # Compare and record weakest flux
-            if flux < weak_flux:
-                weak_flux = flux
-                weak_seg = seg
-                weak_s = s
-
-        if verbose: print(f"Weakest flux: {weak_flux}\nFound on segment {weak_seg}")
+        weak_flux = np.min(strong_fluxes)
+        weak_s = np.argmin(strong_fluxes)
+        weak_seg = segs[weak_s]
 
         # Dichotomy to find balanced tilt -------------------------------------
         
+        if verbose: print("-"*10)
+
         strong_segs = copy(segs)
+        print("Strong segs:", strong_segs, "Weak seg:", weak_seg)
         strong_segs.remove(weak_seg)
 
         tt_bal = copy(tt_max)
@@ -1413,14 +1399,19 @@ class DM(metaclass=Singleton):
 
             fig, axs = plt.subplots(1, 4, figsize=(12, 4))
 
+            lims = [np.min(injection_maps[s]), np.max(injection_maps[s])]
+
+            e = ttamp-mrad_per_pixel/2
+
             for s, ax in enumerate(axs):
                 ax.set_title(f"Input {s+1} (seg {segs[s]})")
-                ax.imshow(injection_maps[s], cmap='jet', origin='lower', extent=(-ttamp, ttamp, -ttamp, ttamp))
-                ax.scatter(*tt_max[s], color='green', marker='^', label=f"Max (f={strong_fluxes[s]:.2e})")
-                ax.scatter(*tt_bal[s], color='green', marker='o', label=f"Bal (f={bal_fluxes[s]:.2e})")
+                im = ax.imshow(injection_maps[s], cmap='jet', origin='lower', extent=(-e, e, -e, e), vmin=lims[0], vmax=lims[1])
+                ax.scatter(*tt_max[s][::-1], color='green', marker='^', label=f"Max (f={strong_fluxes[s]:.2e})")
+                ax.scatter(*tt_bal[s][::-1], color='green', marker='o', label=f"Bal (f={bal_fluxes[s]:.2e})")
                 ax.set_ylabel("Tip (mrad)")
                 ax.set_xlabel("Tilt (mrad)")
                 ax.legend()
+                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
             plt.tight_layout()
             plt.show()
