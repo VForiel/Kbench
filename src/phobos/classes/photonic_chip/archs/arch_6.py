@@ -596,11 +596,11 @@ class Arch6(Arch, metaclass=Singleton):
         # Arch6 has 4 actuators; by default use phase shifters, but allow DM
         # segments as actuators when use_dm is True.
         if use_dm:
-            dm_segments_list = Config().get('dm.injection_segments')
+            dm_segments_list = Config().get('injection.segments')
 
             if dm_segments_list is None or len(dm_segments_list) < len(self.shifters):
                 raise ValueError(
-                    "Config key 'dm.injection_segments' must provide at least 4 DM segment indices when use_dm=True"
+                    "Config key 'injection.segments' must provide at least 4 DM segment indices when use_dm=True"
                 )
 
             shifter_indices = range(len(self.shifters))

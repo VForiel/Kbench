@@ -54,7 +54,9 @@ def load_or_create_config():
             'serial_number': "27BW007#051",
             'config_path': "./config/DM/DM_config.json",
             'stabilization_time': 0.001,
-            'injection_segments': [138, 137, 136, 135]
+        },
+        'injection': {
+            'segments': [138, 137, 136, 135],
         },
         'camera': {
             'img_shm_path': "/dev/shm/cred1.im.shm",
