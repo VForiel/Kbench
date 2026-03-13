@@ -22,6 +22,8 @@ from copy import deepcopy as copy
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
+from scipy.optimize import curve_fit
+import matplotlib.pyplot as plt
 
 from ..utils import Singleton
 from .config import Config
@@ -165,7 +167,7 @@ class Injection(metaclass=Singleton):
               f"{[self._channel_for_segment(s) for s in seg_indices]} "
               f"(segments {seg_indices})")
 
-    def max(self, channels=None) -> None:
+    def set_max(self, channels=None) -> None:
         """Apply stored *max* injection calibration to selected channels.
 
         Parameters
@@ -203,7 +205,7 @@ class Injection(metaclass=Singleton):
               f"{[self._channel_for_segment(s) for s in seg_indices]} "
               f"(segments {seg_indices})")
 
-    def balanced(self, channels=None) -> None:
+    def set_balanced(self, channels=None) -> None:
         """Apply stored *balanced* injection calibration to selected channels.
 
         Parameters
@@ -325,6 +327,289 @@ class Injection(metaclass=Singleton):
         return injection_maps, tt_ramp
 
     # -- calibration ----------------------------------------------------------
+    def find_max_injection(self,
+           injection_maps,
+           tt_ramp,
+           nb_std: float,
+           plot: bool = True,
+         ):
+
+        """
+        Find the maximum injection position (tip and tilt) for specific segments.
+
+        This method performs a two-pass 2D Gaussian fit on injection flux maps to
+        determine the optimal tip and tilt coordinates. The first pass identifies
+        the general "splodge" location, while the second pass refines the
+        measurement by fitting within a cropped region defined by a multiple
+        of the initial standard deviation.
+
+        Parameters
+        ----------
+        injection_maps : ndarray
+            A 3D NumPy array of shape (n_segments, n_tt, n_tt) containing the
+            recorded flux intensity for each tip/tilt combination.
+        tt_ramp : ndarray
+            A 1D NumPy array representing the tip and tilt coordinate values
+            (typically in mrad) used to generate the meshgrid for fitting.
+        nb_std : float
+            The number of standard deviations from the first-pass fit used to
+            define the cropping window for the refined second-pass fit.
+        plot : bool, optional
+            If True, generates diagnostic plots including the raw maps,
+            Gaussian models, and residuals for both the full and cropped data.
+            Default is True.
+
+        Returns
+        -------
+        max_ptt : dict
+            A dictionary where keys are the segment indices (as strings) and
+            values are lists containing:
+            [piston_nm, optimal_tip, optimal_tilt].
+
+        Notes
+        -----
+        - The function assumes that `self._injection_segments` and a global
+          `Config` object providing 'dm.piston_range' are available.
+        - The 2D Gaussian model accounts for amplitude, position, sigma (spread),
+          rotation (theta), and a global offset.
+        - Chi-squared ($\chi^2$) values are calculated for both the gross and
+          fine fits to provide a measure of fit quality.
+        """
+
+        def twoD_Gaussian(xy, amplitude, yo, xo, sigma_y, sigma_x, theta, offset):
+            """
+            Generate a flat array of a 2D-Gausian.
+
+            Parameters
+            ----------
+            xy : tuple
+                Meshgrid on which sampling the surface.
+            amplitude : float
+                Amplitude.
+            yo : float
+                Locate parameter along row axis.
+            xo : float
+                Locate parameter along column axis.
+            sigma_y : float
+                Scale parameter of the Gaussian in row axis.
+            sigma_x : float
+                Scale parameter of the Gaussian in column axis.
+            theta : float
+                Orientation of the Gaussian, in radians.
+            offset : float
+                Global offset.
+
+            Returns
+            -------
+            1d-array
+                Flattened array of the 2d Gaussian.
+
+            """
+            x, y = xy
+            xo = float(xo)
+            yo = float(yo)
+            a = (np.cos(theta)**2)/(2*sigma_x**2) + (np.sin(theta)**2)/(2*sigma_y**2)
+            b = -(np.sin(2*theta))/(4*sigma_x**2) + (np.sin(2*theta))/(4*sigma_y**2)
+            c = (np.sin(theta)**2)/(2*sigma_x**2) + (np.cos(theta)**2)/(2*sigma_y**2)
+            g = offset + amplitude*np.exp( - (a*((x-xo)**2) + 2*b*(x-xo)*(y-yo)
+                                    + c*((y-yo)**2)))
+            return g.ravel()
+
+        def fit_model(data, x, y):
+            """
+            Fit a 2D Gaussian model to the provided data using non-linear least squares.
+
+            This function utilizes `scipy.optimize.curve_fit` to determine the
+            optimal parameters of a 2D Gaussian distribution that best describes
+            the input intensity map.
+
+            Parameters
+            ----------
+            data : ndarray
+                A 2D NumPy array representing the observed flux or intensity map
+                to be fitted.
+            x : ndarray
+                A 2D meshgrid array of the x-coordinates (typically representing
+                tilt or column indices).
+            y : ndarray
+                A 2D meshgrid array of the y-coordinates (typically representing
+                tip or row indices).
+
+            Returns
+            -------
+            popt : ndarray
+                An array of the optimal parameters found by the fit:
+                `[amplitude, yo, xo, sigma_y, sigma_x, theta, offset]`.
+                If the fit fails to converge, returns an array of zeros.
+            pcov : ndarray
+                The estimated covariance of `popt`. The diagonals provide the
+                variance of the parameter estimates. Returns an array of zeros
+                if the fit fails.
+
+            Notes
+            -----
+            The optimization starts with an initial guess ($p_0$) defined as:
+            * **Amplitude:** `data.max()`
+            * **Center (yo, xo):** (0, 0)
+            * **Sigma (y, x):** (1, 1)
+            * **Rotation (theta):** 0
+            * **Offset:** 0
+
+            In the event of a `RuntimeError` (e.g., the maximum number of
+            iterations is reached without convergence), the function catches
+            the exception and returns zero-filled arrays to avoid crashing
+            the main loop.
+            """
+
+            initial_guess = [data.max(), 0., 0., 1., 1., 0., 0.]
+            try:
+                popt, pcov = curve_fit(twoD_Gaussian, (x, y), data.ravel(), p0=initial_guess)
+            except RuntimeError as e:
+                print(i, e)
+                popt = np.zeros((len(initial_guess),))
+                pcov = np.zeros((len(initial_guess), len(initial_guess)))
+
+            return popt, pcov
+
+        def plot_fit(data, seg_max, suptitle, subtitle=''):
+            """
+                Visualize the injection maps or models with overlaid maximum positions.
+
+                This function generates a figure containing a grid of subplots (up to 2x2)
+                displaying 2D maps (e.g., raw data, fitted models, or residuals). It
+                overlays a white crosshair at the detected maximum tip/tilt coordinates
+                for each segment.
+
+                Parameters
+                ----------
+                data : list of lists
+                    A list where each element is a container of `[image, tip_range, tilt_ramp]`.
+                    - `image` (ndarray): The 2D intensity map to plot.
+                    - `tip_range` (ndarray): 1D array of tip coordinates for the y-axis.
+                    - `tilt_ramp` (ndarray): 1D array of tilt coordinates for the x-axis.
+                seg_max : ndarray
+                    An array of shape (n_segments, 2) containing the [tip, tilt] coordinates
+                    of the maximum injection point to be marked on the plots.
+                suptitle : str
+                    The main title for the entire figure.
+                subtitle : str or list of str, optional
+                    A string or list of strings to append to each subplot title (e.g.,
+                    $\chi^2$ values). If a list is provided, it must match the number of
+                    segments. Default is an empty string.
+
+                Returns
+                -------
+                None
+                    The function renders a Matplotlib figure but does not return a value.
+
+                Notes
+                -----
+                - This function assumes a maximum of 4 segments due to the hardcoded
+                  `plt.subplot(2, 2, i+1)` layout.
+                - It depends on the `injection_seg_indices` variable defined in the
+                  parent function's scope.
+                - The color scale (`vmin`, `vmax`) is normalized across all subplots
+                  based on the minimum and maximum values found in the input `data`.
+                """
+            plt.figure(figsize=(10,10))
+            plt.suptitle(suptitle)
+            for i in range(len(injection_seg_indices)):
+                image, tip_range, tilt_ramp = data[i]
+                tilt_step = np.diff(tilt_ramp)[0]
+                tip_step = np.diff(tip_range)[0]
+                plt.subplot(2,2,i+1)
+                try:
+                    plt.title('Seg '+str(injection_seg_indices[i])+subtitle[i])
+                except:
+                    plt.title('Seg '+str(injection_seg_indices[i])+subtitle)
+                plt.imshow(image, origin='lower', cmap='jet',
+                        extent=[tilt_ramp.min()-tilt_step/2, tilt_ramp.max()+tilt_step/2,
+                                tip_range.min()-tip_step/2, tip_range.max()+tip_step/2],
+                        vmin=min([elt[0].min() for elt in data]),
+                        vmax=max([elt[0].max() for elt in data]))
+                plt.colorbar()
+                plt.scatter(seg_max[i,1], seg_max[i,0], c='w', marker='+', s=100, label='tt_max')
+                plt.xlabel('Tilt (mrad)')
+                plt.ylabel('Tip (mrad)')
+            plt.tight_layout()
+
+        injection_seg_indices = self._injection_segments
+        piston_nm = Config().get('dm.piston_range')
+        max_ptt = {}
+
+        x, y = np.meshgrid(tt_ramp, tt_ramp) # tilt and tip
+
+        # -- Find gross splodge's centroids and spread in tip and tilt
+        params = []
+        models = []
+
+        for i in range(injection_maps.shape[0]):
+            tt_map = injection_maps[i]
+            popt, pcov = fit_model(tt_map, x, y)
+            params.append(popt)
+            models.append(twoD_Gaussian((x, y), *popt).reshape(x.shape))
+
+            print(f"Injection spread of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[3]:.5f},{popt[4]:.5f}) mrad")
+
+        params = np.array(params)
+        models = np.array(models)
+        residuals = injection_maps - models
+        chi2 = np.sum(residuals**2, (1,2)) / (injection_maps[0].size - len(popt))
+
+        # -- Find fine splodge's centroids and spread in tip and tilt
+        cropped_data = []
+        params_cropped = []
+        models_cropped = []
+
+        for i in range(injection_maps.shape[0]):
+            mask_tip = (tt_ramp >= params[i, 1] - nb_std * params[i, 3]) & (tt_ramp <= params[i, 1] + nb_std * params[i, 3])
+            mask_tilt = (tt_ramp >= params[i, 2] - nb_std * params[i, 4]) & (tt_ramp <= params[i, 2] + nb_std * params[i, 4])
+            cropped_tip = tt_ramp[mask_tip]
+            cropped_tilt = tt_ramp[mask_tilt]
+
+            tt_map = injection_maps[i, mask_tip]
+            tt_map = tt_map[:, mask_tilt]
+
+            cropped_data.append([tt_map, cropped_tip, cropped_tilt])
+
+            x, y = np.meshgrid(cropped_tilt, cropped_tip)
+            popt, pcov = fit_model(tt_map, x, y)
+            params_cropped.append(popt)
+            models_cropped.append([twoD_Gaussian((x, y), *popt).reshape(x.shape), cropped_tip, cropped_tilt])
+
+            max_ptt[str(injection_seg_indices[i])] = [piston_nm[i], popt[1], popt[2]]
+
+            print(f"Injection max of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[1]:.5f},{popt[2]:.5f}) mrad; flux = {popt[0]:.4g}")
+
+        params_cropped = np.array(params_cropped)
+        residuals_cropped = [cropped_data[i][0] - models_cropped[i] for i in range(len(cropped_data))]
+        chi2_cropped = [np.sum(residuals_cropped[i]**2) / (cropped_data[i][0].size - len(params_cropped[i])) for i in range(len(residuals))]
+
+        if plot:
+            data = [injection_maps, tt_ramp, tt_ramp]
+            seg_max = params[:,1:3]
+            plot_fit(data, seg_max, 'Injection maps')
+
+            data = [models, tt_ramp, tt_ramp]
+            seg_max = params[:,1:3]
+            plot_fit(data, seg_max, 'Injection models', [r'(\chi^2=%.3f)'%(elt) for elt in chi2])
+
+            data = [models, tt_ramp, tt_ramp]
+            seg_max = params[:,1:3]
+            plot_fit(residuals, seg_max, 'Residuals')
+
+            seg_max = params[:,1:3]
+            plot_fit(cropped_data, seg_max, 'Cropped injection maps')
+
+            seg_max = params[:,1:3]
+            plot_fit(models_cropped, seg_max, 'Cropped injection models', [r'(\chi^2=%.3f)'%(elt) for elt in chi2_cropped])
+
+            data = [residuals_cropped[i], cropped_data[i][1], cropped_data[i][2]]
+            seg_max = params[:,1:3]
+            plot_fit(data, seg_max, 'Cropped residuals')
+
+        return max_ptt
+
 
     def calibrate(
         self,
@@ -396,7 +681,6 @@ class Injection(metaclass=Singleton):
             ``'tt_ramp'``
                 ``ndarray`` – The tip/tilt ramp used for the scan.
         """
-        import phobos
 
         segs = self._injection_segments
         n_ch = len(segs)
