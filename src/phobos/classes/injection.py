@@ -311,9 +311,9 @@ class Injection(metaclass=Singleton):
                 for j, tilt in enumerate(tt_ramp):
                     self.dm.segments[seg].set_ptt(DM().mid_piston, float(tip), float(tilt))
 
-                    flux = np.zeros_like(camera.get_outputs(flux_mode='sum'))
+                    flux = np.zeros_like(camera.get_outputs(flux_mode='mean'))
                     for _ in range(avg_frames):
-                        flux += camera.get_outputs(flux_mode='sum')
+                        flux += camera.get_outputs(flux_mode='mean')
                     flux /= float(avg_frames)
 
                     injection_maps[ch_idx, i, j] = float(np.sum(flux))
@@ -536,7 +536,7 @@ class Injection(metaclass=Singleton):
             return fig
 
         injection_seg_indices = self._injection_segments
-        piston_nm = Config().get('dm.piston_range')
+        piston_nm = float(np.mean(Config().get('dm.piston_range')))
         max_ptt = {}
 
         x, y = np.meshgrid(tt_ramp, tt_ramp) # tilt and tip
@@ -551,7 +551,7 @@ class Injection(metaclass=Singleton):
             params.append(popt)
             models.append(twoD_Gaussian((x, y), *popt).reshape(x.shape))
 
-            print(f"Injection spread of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[3]:.5f},{popt[4]:.5f}) mrad")
+            print(f"Injection spread of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[1]:.5f},{popt[2]:.5f}) ({popt[3]:.5f},{popt[4]:.5f}) mrad")
 
         params = np.array(params)
         models = np.array(models)
@@ -578,45 +578,45 @@ class Injection(metaclass=Singleton):
             x, y = np.meshgrid(cropped_tilt, cropped_tip)
             popt, pcov = fit_model(tt_map, x, y)
             params_cropped.append(popt)
-            models_cropped.append([twoD_Gaussian((x, y), *popt).reshape(x.shape), cropped_tip, cropped_tilt])
-            best_tip, best_tilt = popt[1], popt[2]
+            models_cropped.append([twoD_Gaussian((x, y), *popt).reshape(tt_map.shape), cropped_tip, cropped_tilt])
+            best_tip, best_tilt = float(popt[1]), float(popt[2])
 
-            max_ptt[str(injection_seg_indices[i])] = [piston_nm[i], best_tip, best_tilt]
+            max_ptt[str(injection_seg_indices[i])] = [piston_nm, best_tip, best_tilt]
             max_tt.append([best_tip, best_tilt])
 
-            print(f"Injection max of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[1]:.5f},{popt[2]:.5f}) mrad; flux = {popt[0]:.4g}")
+            print(f"Injection max of seg={injection_seg_indices[i]}: (tip, tilt) = ({best_tip:.5f},{best_tilt:.5f}) mrad; flux = {popt[0]:.4g}")
 
         params_cropped = np.array(params_cropped)
-        residuals_cropped = [cropped_data[i][0] - models_cropped[i] for i in range(len(cropped_data))]
+        residuals_cropped = [cropped_data[i][0] - models_cropped[i][0] for i in range(len(cropped_data))]
         chi2_cropped = [np.sum(residuals_cropped[i]**2) / (cropped_data[i][0].size - len(params_cropped[i])) for i in range(len(residuals))]
 
         Config().set('injection.max', max_tt, autosave=False)
         Config().save_to_file()
 
-        print("✅ Injection calibration saved to config "
-              "(injection.max / injection.balanced)")
+        # print("✅ Injection calibration saved to config "
+        #       "(injection.max / injection.balanced)")
 
         figs = [None] * 6
         if plot:
-            data = [injection_maps, tt_ramp, tt_ramp]
+            data = [[injection_maps[i], tt_ramp, tt_ramp] for i in range(len(injection_maps))]
             seg_max = params[:,1:3]
             figs[0] = plot_fit(data, seg_max, 'Injection maps')
 
-            data = [models, tt_ramp, tt_ramp]
+            data = [[models[i], tt_ramp, tt_ramp] for i in range(len(models))]
             seg_max = params[:,1:3]
-            figs[1] = plot_fit(data, seg_max, 'Injection models', [r'(\chi^2=%.3f)'%(elt) for elt in chi2])
+            figs[1] = plot_fit(data, seg_max, 'Injection models', [r"($\chi^2$=%.3f)"%(elt) for elt in chi2])
 
-            data = [models, tt_ramp, tt_ramp]
+            data = [[residuals[i], tt_ramp, tt_ramp] for i in range(len(residuals))]
             seg_max = params[:,1:3]
-            figs[2] = plot_fit(residuals, seg_max, 'Residuals')
+            figs[2] = plot_fit(data, seg_max, 'Residuals')
 
             seg_max = params[:,1:3]
             figs[3] = plot_fit(cropped_data, seg_max, 'Cropped injection maps')
 
             seg_max = params[:,1:3]
-            figs[4] = plot_fit(models_cropped, seg_max, 'Cropped injection models', [r'(\chi^2=%.3f)'%(elt) for elt in chi2_cropped])
+            figs[4] = plot_fit(models_cropped, seg_max, 'Cropped injection models', [r'($\chi^2$=%.3f)'%(elt) for elt in chi2_cropped])
 
-            data = [residuals_cropped[i], cropped_data[i][1], cropped_data[i][2]]
+            data = [[residuals_cropped[i], cropped_data[i][1], cropped_data[i][2]] for i in range(len(residuals_cropped))]
             seg_max = params[:,1:3]
             figs[5] = plot_fit(data, seg_max, 'Cropped residuals')
 
@@ -626,7 +626,8 @@ class Injection(metaclass=Singleton):
                 'models':models,
                 'cropped_data':cropped_data,
                 'models_cropped':models_cropped,
-                'fig':figs}
+                'fig':figs,
+                'diag':max_tt}
 
 
     def calibrate(

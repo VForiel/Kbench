@@ -195,7 +195,7 @@ if __name__ == '__main__':
     
 
     dm = phobos.DM()
-    [dm.segments[seg].set_ptt(0, 0., 0.) for seg in active_segs0]
+    [dm.segments[seg].set_ptt(0., 0., 0.) for seg in active_segs0]
     print('All seg flat')
     
     crop_size = 13 # px window around the output
@@ -218,177 +218,157 @@ if __name__ == '__main__':
     # print('All Seg Off+piston')
     # sleep(0.01)
     
-    for it in range(1):
-        plt.close('all')
-        save_path = create_dir(save_path0)
+    # for it in range(1):
+    #     plt.close('all')
+    #     save_path = create_dir(save_path0)
         
-        active_segs = active_segs0[:]
-        nbeams = len(active_segs)
+    #     active_segs = active_segs0[:]
+    #     nbeams = len(active_segs)
         
-        tip_range, tip_step = np.linspace(-ttamp, ttamp, npts, retstep=True)
-        tilt_range, tilt_step = np.linspace(-ttamp, ttamp, npts, retstep=True)
+    #     tip_range, tip_step = np.linspace(-ttamp, ttamp, npts, retstep=True)
+    #     tilt_range, tilt_step = np.linspace(-ttamp, ttamp, npts, retstep=True)
     
-        camera = phobos.Cred3()
-        
-        # =============================================================================
-        # Acquiring data
-        # =============================================================================
-        start_acq = time()
-        
-        # Flat
-        [dm.segments[seg].set_ptt(mid_piston[0], 0., 0.) for seg in active_segs]
-        print('Some Seg flat+piston')
-        sleep(wait_seg)
-        
-        # Off on 4 apertures
-        [dm.segments[seg].set_ptt(mid_piston[0], off_tip, off_tilt) for seg in active_segs]
-        print('Some Seg Off+piston')
-        sleep(0.01)
-        
-        avg = 1
-        
-        log_semval = []
-        tt_flux = []
-        for i in tqdm(range(nbeams)):
-            temp1 = []
-            for tip in tip_range:
-                temp2 = []
-                for tilt in tilt_range:
-                    dm.segments[active_segs[i]].set_ptt(mid_piston[i], tip, tilt)
-                    sleep(wait_seg)
-                    flx = np.zeros_like(camera.get_outputs(True, 'mean'))
-                    for k in range(avg):
-                        flx0 = camera.get_outputs(True, 'mean')
-                        flx = flx + flx0
-                    flx /= float(avg)
-                    semval = camera.cam.sems[camera.semid].value
-                    log_semval.append([i, tip, tilt, semval])
-                    temp2.append(flx)
-                temp1.append(temp2)
-            tt_flux.append(temp1)
-            dm.segments[active_segs[i]].set_ptt(mid_piston[i], off_tip, off_tilt)
-            sleep(wait_seg)
-            
-        tt_flux = np.array(tt_flux) # Axes (Beams, tip, tilt, flux outputs)
-        log_semval = np.array(log_semval)
-        np.savetxt(save_path+'log_semval.txt', log_semval)
-        [dm.segments[seg].set_ptt(mid_piston[i], 0., 0.) for seg in active_segs]
-        print('Some Seg flat+piston')
-        sleep(wait_seg)
-        stop_acq = time()
-
-        # =============================================================================
-        # Process data
-        # =============================================================================
-        start_process = time()
-        flux = np.sum(tt_flux, axis=-1)
-        np.save(save_path+'flux', flux)
-        stop_process = time()
-        
-        # =============================================================================
-        # Analyse data
-        # =============================================================================
-        start_analysis = time()
-        x, y = np.meshgrid(tilt_range, tip_range)
-        params = []
-        pcovs = []
-        
-        for i in range(flux.shape[0]):
-            output = flux[i]
-            initial_guess = [output.max(), 0., 0., 1., 1., 0., 0.]
-            try:
-                popt, pcov = curve_fit(twoD_Gaussian, (x, y), output.ravel(), p0=initial_guess)
-            except RuntimeError as e:
-                print(i, e)
-                popt = np.zeros((len(initial_guess),))
-                pcov = np.zeros((len(initial_guess), len(initial_guess)))
-            params.append(popt)
-            pcovs.append(pcov)
-            
-        params = np.array(params)
-        pcovs = np.array(pcovs)
-        seg_on = params[:,1:3]
-        seg_flat = np.zeros((flux.shape[0], 2))
-        seg_off = np.ones_like(seg_on)
-        seg_off[:,0] = off_tip
-        seg_off[:,1] = off_tilt
-        
-        stop_analysis = time()
-        
-        np.savetxt(save_path + 'fit_params.txt', params)
-        np.save(save_path + 'fit_pcovs', pcovs)
-        save_config(save_path, mid_piston, seg_on, seg_off, active_segs)
-        np.save(save_path+'time_stamp', time())
-        
-        # Plot
-        plt.figure(figsize=(10, 10))
-        for i in range(len(active_segs)):
-            plt.subplot(2, 2, i+1)
-            plt.title('Seg '+str(active_segs0[i]))
-            plt.imshow(flux[i], origin='lower', cmap='jet',
-                       extent=[-ttamp-tilt_step/2, ttamp+tilt_step/2,
-                               -ttamp-tip_step/2, ttamp+tip_step/2],
-                       vmin=flux.min(),
-                       vmax=flux.max())
-            plt.colorbar()
-            plt.scatter(seg_on[i,1], seg_on[i,0], c='w', marker='+', s=100)
-            plt.xlabel('Tilt (mrad)')
-            plt.ylabel('Tip (mrad)')
-        plt.tight_layout()
-        plt.savefig(save_path + 'TT_map.png', dpi=150, format='png')
-        # plt.close('all')
-
-        print('\n=== Time stats ===')
-        print('Total', stop_analysis - start_acq)
-        print('Acq', stop_acq - start_acq)
-        print('Process', stop_process - start_process)
-        print('Analysis', stop_analysis - start_analysis)
-        
-        with open(save_path+'log.txt', 'w') as f:
-            f.write(date_now.isoformat()+'\n')
-            f.write('Grid size\t'+str(npts)+'\n')
-            f.write('Avg\t'+str(avg)+'\n')
-            f.write('Wait seg\t'+str(wait_seg)+'\n')
-            f.write('Total\t'+str(stop_analysis - start_acq)+'\n')
-            f.write('Acq\t'+str(stop_acq - start_acq)+'\n')
-            f.write('Process\t'+str(stop_process - start_process)+'\n')
-            f.write('Analysis\t'+str(stop_analysis - start_analysis)+'\n')
-        
-        print('')
-        print('Positions and widths')
-        print(params[:,1:5]) # Pos and width of Gaussian
-        print('')
-        np.savetxt(save_path + 'pos_and_width.txt', params[:,1:5])
-                   
-    [dm.segments[seg].set_ptt(0, 0., 0.) for seg in active_segs0]
-    print('All Seg flat')
-    sleep(wait_seg)
-    
-    # a = dm.calibrate_injection2()
-    # def check_max_bal(dictio):
     #     camera = phobos.Cred3()
-    #     maxi = dictio['max']
-    #     out_maxi = []
-    #     for key, vals in maxi.items():
-    #         [dm.segments[int(k)].set_ptt(-1158, 0., -5.47) for k in maxi.keys()]
-    #         sleep(0.1)
-    #         dm.segments[int(key)].set_ptt(*vals)
-    #         sleep(0.1)
-    #         img = camera.get_image(subtract_dark=True)
-    #         sleep(0.1)
-    #         tt_cropped = camera.crop_outputs_from_image(img)#, crop_centers, crop_size)
-    #         tt_cropped = np.array(tt_cropped)
-    #         out_maxi.append(tt_cropped.sum())
+        
+    #     # =============================================================================
+    #     # Acquiring data
+    #     # =============================================================================
+    #     start_acq = time()
+        
+    #     # Flat
+    #     [dm.segments[seg].set_ptt(mid_piston[0], 0., 0.) for seg in active_segs]
+    #     print('Some Seg flat+piston')
+    #     sleep(wait_seg)
+        
+    #     # Off on 4 apertures
+    #     [dm.segments[seg].set_ptt(mid_piston[0], off_tip, off_tilt) for seg in active_segs]
+    #     print('Some Seg Off+piston')
+    #     sleep(0.01)
+        
+    #     avg = 1
+        
+    #     log_semval = []
+    #     tt_flux = []
+    #     for i in tqdm(range(nbeams)):
+    #         temp1 = []
+    #         for tip in tip_range:
+    #             temp2 = []
+    #             for tilt in tilt_range:
+    #                 dm.segments[active_segs[i]].set_ptt(mid_piston[i], tip, tilt)
+    #                 sleep(wait_seg)
+    #                 flx = np.zeros_like(camera.get_outputs(True, 'mean'))
+    #                 for k in range(avg):
+    #                     flx0 = camera.get_outputs(True, 'mean')
+    #                     flx = flx + flx0
+    #                 flx /= float(avg)
+    #                 semval = camera.cam.sems[camera.semid].value
+    #                 log_semval.append([i, tip, tilt, semval])
+    #                 temp2.append(flx)
+    #             temp1.append(temp2)
+    #         tt_flux.append(temp1)
+    #         dm.segments[active_segs[i]].set_ptt(mid_piston[i], off_tip, off_tilt)
+    #         sleep(wait_seg)
             
-    #     bali = dictio['balanced']
-    #     out_bali = []
-    #     for key, vals in bali.items():
-    #         [dm.segments[int(k)].set_ptt(-1158, 0., -5.47) for k in bali.keys()]
-    #         sleep(0.1)
-    #         dm.segments[int(key)].set_ptt(*vals)
-    #         sleep(0.1)
-    #         img = camera.get_image(subtract_dark=True)
-    #         sleep(0.1)
-    #         tt_cropped = camera.crop_outputs_from_image(img)#, crop_centers, crop_size)
-    #         tt_cropped = np.array(tt_cropped)
-    #         out_bali.append(tt_cropped.sum())
+    #     tt_flux = np.array(tt_flux) # Axes (Beams, tip, tilt, flux outputs)
+    #     log_semval = np.array(log_semval)
+    #     np.savetxt(save_path+'log_semval.txt', log_semval)
+    #     [dm.segments[seg].set_ptt(mid_piston[i], 0., 0.) for seg in active_segs]
+    #     print('Some Seg flat+piston')
+    #     sleep(wait_seg)
+    #     stop_acq = time()
+
+    #     # =============================================================================
+    #     # Process data
+    #     # =============================================================================
+    #     start_process = time()
+    #     flux = np.sum(tt_flux, axis=-1)
+    #     np.save(save_path+'flux', flux)
+    #     stop_process = time()
+        
+    #     # =============================================================================
+    #     # Analyse data
+    #     # =============================================================================
+    #     start_analysis = time()
+    #     x, y = np.meshgrid(tilt_range, tip_range)
+    #     params = []
+    #     pcovs = []
+        
+    #     for i in range(flux.shape[0]):
+    #         output = flux[i]
+    #         initial_guess = [output.max(), 0., 0., 1., 1., 0., 0.]
+    #         try:
+    #             popt, pcov = curve_fit(twoD_Gaussian, (x, y), output.ravel(), p0=initial_guess)
+    #         except RuntimeError as e:
+    #             print(i, e)
+    #             popt = np.zeros((len(initial_guess),))
+    #             pcov = np.zeros((len(initial_guess), len(initial_guess)))
+    #         params.append(popt)
+    #         pcovs.append(pcov)
+            
+    #     params = np.array(params)
+    #     pcovs = np.array(pcovs)
+    #     seg_on = params[:,1:3]
+    #     seg_flat = np.zeros((flux.shape[0], 2))
+    #     seg_off = np.ones_like(seg_on)
+    #     seg_off[:,0] = off_tip
+    #     seg_off[:,1] = off_tilt
+        
+    #     stop_analysis = time()
+        
+    #     np.savetxt(save_path + 'fit_params.txt', params)
+    #     np.save(save_path + 'fit_pcovs', pcovs)
+    #     save_config(save_path, mid_piston, seg_on, seg_off, active_segs)
+    #     np.save(save_path+'time_stamp', time())
+        
+    #     # Plot
+    #     plt.figure(figsize=(10, 10))
+    #     for i in range(len(active_segs)):
+    #         plt.subplot(2, 2, i+1)
+    #         plt.title('Seg '+str(active_segs0[i]))
+    #         plt.imshow(flux[i], origin='lower', cmap='jet',
+    #                    extent=[-ttamp-tilt_step/2, ttamp+tilt_step/2,
+    #                            -ttamp-tip_step/2, ttamp+tip_step/2],
+    #                    vmin=flux.min(),
+    #                    vmax=flux.max())
+    #         plt.colorbar()
+    #         plt.scatter(seg_on[i,1], seg_on[i,0], c='w', marker='+', s=100)
+    #         plt.xlabel('Tilt (mrad)')
+    #         plt.ylabel('Tip (mrad)')
+    #     plt.tight_layout()
+    #     plt.savefig(save_path + 'TT_map.png', dpi=150, format='png')
+    #     # plt.close('all')
+
+    #     print('\n=== Time stats ===')
+    #     print('Total', stop_analysis - start_acq)
+    #     print('Acq', stop_acq - start_acq)
+    #     print('Process', stop_process - start_process)
+    #     print('Analysis', stop_analysis - start_analysis)
+        
+    #     with open(save_path+'log.txt', 'w') as f:
+    #         f.write(date_now.isoformat()+'\n')
+    #         f.write('Grid size\t'+str(npts)+'\n')
+    #         f.write('Avg\t'+str(avg)+'\n')
+    #         f.write('Wait seg\t'+str(wait_seg)+'\n')
+    #         f.write('Total\t'+str(stop_analysis - start_acq)+'\n')
+    #         f.write('Acq\t'+str(stop_acq - start_acq)+'\n')
+    #         f.write('Process\t'+str(stop_process - start_process)+'\n')
+    #         f.write('Analysis\t'+str(stop_analysis - start_analysis)+'\n')
+        
+    #     print('')
+    #     print('Positions and widths')
+    #     print(params[:,1:5]) # Pos and width of Gaussian
+    #     print('')
+    #     np.savetxt(save_path + 'pos_and_width.txt', params[:,1:5])
+                   
+    # [dm.segments[seg].set_ptt(0, 0., 0.) for seg in active_segs0]
+    # print('All Seg flat')
+    # print('')
+    # print('')
+    # print('')
+    # sleep(wait_seg)
+    
+    inj = phobos.Injection()
+    injection_maps, tt_ramp = inj.get_injection_maps(verbose=False)
+    ttamp = 3.
+    tilt_step = tip_step = np.diff(tt_ramp)[0]
+    out = inj.find_max_injection(injection_maps, tt_ramp, 1.)
