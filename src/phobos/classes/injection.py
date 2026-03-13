@@ -511,7 +511,7 @@ class Injection(metaclass=Singleton):
                 - The color scale (`vmin`, `vmax`) is normalized across all subplots
                   based on the minimum and maximum values found in the input `data`.
                 """
-            plt.figure(figsize=(10,10))
+            fig = plt.figure(figsize=(10,10))
             plt.suptitle(suptitle)
             for i in range(len(injection_seg_indices)):
                 image, tip_range, tilt_ramp = data[i]
@@ -532,6 +532,8 @@ class Injection(metaclass=Singleton):
                 plt.xlabel('Tilt (mrad)')
                 plt.ylabel('Tip (mrad)')
             plt.tight_layout()
+
+            return fig
 
         injection_seg_indices = self._injection_segments
         piston_nm = Config().get('dm.piston_range')
@@ -560,6 +562,7 @@ class Injection(metaclass=Singleton):
         cropped_data = []
         params_cropped = []
         models_cropped = []
+        max_tt = []
 
         for i in range(injection_maps.shape[0]):
             mask_tip = (tt_ramp >= params[i, 1] - nb_std * params[i, 3]) & (tt_ramp <= params[i, 1] + nb_std * params[i, 3])
@@ -576,8 +579,10 @@ class Injection(metaclass=Singleton):
             popt, pcov = fit_model(tt_map, x, y)
             params_cropped.append(popt)
             models_cropped.append([twoD_Gaussian((x, y), *popt).reshape(x.shape), cropped_tip, cropped_tilt])
+            best_tip, best_tilt = popt[1], popt[2]
 
-            max_ptt[str(injection_seg_indices[i])] = [piston_nm[i], popt[1], popt[2]]
+            max_ptt[str(injection_seg_indices[i])] = [piston_nm[i], best_tip, best_tilt]
+            max_tt.append([best_tip, best_tilt])
 
             print(f"Injection max of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[1]:.5f},{popt[2]:.5f}) mrad; flux = {popt[0]:.4g}")
 
@@ -585,30 +590,43 @@ class Injection(metaclass=Singleton):
         residuals_cropped = [cropped_data[i][0] - models_cropped[i] for i in range(len(cropped_data))]
         chi2_cropped = [np.sum(residuals_cropped[i]**2) / (cropped_data[i][0].size - len(params_cropped[i])) for i in range(len(residuals))]
 
+        Config().set('injection.max', max_tt, autosave=False)
+        Config().save_to_file()
+
+        print("✅ Injection calibration saved to config "
+              "(injection.max / injection.balanced)")
+
+        figs = [None] * 6
         if plot:
             data = [injection_maps, tt_ramp, tt_ramp]
             seg_max = params[:,1:3]
-            plot_fit(data, seg_max, 'Injection maps')
+            figs[0] = plot_fit(data, seg_max, 'Injection maps')
 
             data = [models, tt_ramp, tt_ramp]
             seg_max = params[:,1:3]
-            plot_fit(data, seg_max, 'Injection models', [r'(\chi^2=%.3f)'%(elt) for elt in chi2])
+            figs[1] = plot_fit(data, seg_max, 'Injection models', [r'(\chi^2=%.3f)'%(elt) for elt in chi2])
 
             data = [models, tt_ramp, tt_ramp]
             seg_max = params[:,1:3]
-            plot_fit(residuals, seg_max, 'Residuals')
+            figs[2] = plot_fit(residuals, seg_max, 'Residuals')
 
             seg_max = params[:,1:3]
-            plot_fit(cropped_data, seg_max, 'Cropped injection maps')
+            figs[3] = plot_fit(cropped_data, seg_max, 'Cropped injection maps')
 
             seg_max = params[:,1:3]
-            plot_fit(models_cropped, seg_max, 'Cropped injection models', [r'(\chi^2=%.3f)'%(elt) for elt in chi2_cropped])
+            figs[4] = plot_fit(models_cropped, seg_max, 'Cropped injection models', [r'(\chi^2=%.3f)'%(elt) for elt in chi2_cropped])
 
             data = [residuals_cropped[i], cropped_data[i][1], cropped_data[i][2]]
             seg_max = params[:,1:3]
-            plot_fit(data, seg_max, 'Cropped residuals')
+            figs[5] = plot_fit(data, seg_max, 'Cropped residuals')
 
-        return max_ptt
+        return {'max':max_ptt,
+                'params':params,
+                'params_cropped':params_cropped,
+                'models':models,
+                'cropped_data':cropped_data,
+                'models_cropped':models_cropped,
+                'fig':figs}
 
 
     def calibrate(
