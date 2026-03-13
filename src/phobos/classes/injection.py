@@ -766,6 +766,11 @@ class Injection(metaclass=Singleton):
         balanced_tt: List[List[float]] = [None] * n_ch  # [tip, tilt] per channel
         flux_balanced: List[float] = [0.0] * n_ch
 
+        # Record dichotomy evaluation history for diagnostic plotting. Each
+        # element is a dict with lists 'tilts' and 'fluxes' storing the
+        # evaluated tilts and corresponding fluxes during the bisection.
+        dichotomy_history: List[dict] = [dict(tilts=[], fluxes=[]) for _ in range(n_ch)]
+
         # The weakest channel stays at its max position
         balanced_tt[weak_ch] = list(max_tt[weak_ch])
         flux_balanced[weak_ch] = target_flux
@@ -798,11 +803,19 @@ class Injection(metaclass=Singleton):
             time.sleep(settle)
             peak_flux = self._measure_flux(camera, avg_frames)
 
+            # store initial point (peak)
+            dichotomy_history[ch_idx]['tilts'].append(best_tilt)
+            dichotomy_history[ch_idx]['fluxes'].append(peak_flux)
+
             # Try a small step in the positive tilt direction
             test_tilt = min(best_tilt + 0.5, tilt_bound_pos)
             self.dm.segments[seg].set_ptt(piston_nm, fixed_tip, test_tilt)
             time.sleep(settle)
             test_flux = self._measure_flux(camera, avg_frames)
+
+            # store the test point
+            dichotomy_history[ch_idx]['tilts'].append(test_tilt)
+            dichotomy_history[ch_idx]['fluxes'].append(test_flux)
 
             if test_flux < peak_flux:
                 # Positive direction reduces flux → search [best_tilt, +ttamp]
@@ -829,6 +842,10 @@ class Injection(metaclass=Singleton):
                 time.sleep(settle)
                 mid_flux = self._measure_flux(camera, avg_frames)
 
+                # record mid-point evaluation for diagnostics
+                dichotomy_history[ch_idx]['tilts'].append(mid_tilt)
+                dichotomy_history[ch_idx]['fluxes'].append(mid_flux)
+
                 if search_sign > 0:
                     # lo is near peak (high flux), hi is far (low flux)
                     if mid_flux > target_flux:
@@ -849,6 +866,10 @@ class Injection(metaclass=Singleton):
             self.dm.segments[seg].set_ptt(piston_nm, fixed_tip, bal_tilt)
             time.sleep(settle)
             bal_flux = self._measure_flux(camera, avg_frames)
+
+            # store final converged point
+            dichotomy_history[ch_idx]['tilts'].append(bal_tilt)
+            dichotomy_history[ch_idx]['fluxes'].append(bal_flux)
 
             balanced_tt[ch_idx] = [fixed_tip, bal_tilt]
             flux_balanced[ch_idx] = bal_flux
@@ -873,11 +894,18 @@ class Injection(metaclass=Singleton):
 
         # ── Plot ─────────────────────────────────────────────────────────────
         fig = None
+        fig_dict = None
         if plot:
-            fig = self._plot_calibration(
+            fig_dict = self._plot_calibration(
                 injection_maps, tt_ramp, segs,
                 max_tt, balanced_tt, flux_max, flux_balanced,
+                dichotomy_history=dichotomy_history,
             )
+            # Backwards-compatible primary figure (maps)
+            if isinstance(fig_dict, dict):
+                fig = fig_dict.get('maps')
+            else:
+                fig = fig_dict
 
         return {
             'max': max_tt,
@@ -887,6 +915,7 @@ class Injection(metaclass=Singleton):
             'injection_maps': injection_maps,
             'tt_ramp': tt_ramp,
             'figure': fig,
+            'figures': fig_dict,
         }
 
     # -- private helpers ------------------------------------------------------
@@ -922,6 +951,7 @@ class Injection(metaclass=Singleton):
         balanced_tt: List[List[float]],
         flux_max: List[float],
         flux_balanced: List[float],
+        dichotomy_history: List[dict] = None,
     ):
         """Generate diagnostic plots for the calibration.
 
@@ -999,7 +1029,63 @@ class Injection(metaclass=Singleton):
             plt.tight_layout()
             plt.show()
 
-            return fig
+            # ── Dichotomy evolution at fixed tip (profile slice) ───────────
+            try:
+                fig2, axs2 = plt.subplots(1, n_ch, figsize=(4 * n_ch, 3))
+                if n_ch == 1:
+                    axs2 = [axs2]
+
+                for ch_idx, ax in enumerate(axs2):
+                    seg = segs[ch_idx]
+                    tip_m, tilt_m = max_tt[ch_idx]
+                    tip_b, tilt_b = balanced_tt[ch_idx]
+
+                    # find nearest tip index in tt_ramp
+                    tip_idx = int(np.argmin(np.abs(tt_ramp - float(tip_m))))
+                    profile = injection_maps[ch_idx, tip_idx, :]
+                    ax.plot(tt_ramp, profile, '-k', lw=1, label='profile (fixed tip)')
+
+                    # plot dichotomy history if available
+                    if dichotomy_history and len(dichotomy_history) > ch_idx:
+                        h = dichotomy_history[ch_idx]
+                        if h and len(h.get('tilts', [])) > 0:
+                            ax.plot(h['tilts'], h['fluxes'], '-o', color='C1',
+                                    label='dichotomy evals')
+
+                    # mark max and balanced
+                    ax.scatter([tilt_m], [flux_max[ch_idx]], marker='^', color='C2',
+                               s=80, edgecolors='black', label='max')
+                    ax.scatter([tilt_b], [flux_balanced[ch_idx]], marker='o', color='C3',
+                               s=60, edgecolors='black', label='balanced')
+
+                    ax.set_xlabel('Tilt (mrad)')
+                    ax.set_title(f'Ch {ch_idx} (seg {seg})')
+                    ax.legend(fontsize='small')
+
+                plt.tight_layout()
+                plt.show()
+            except Exception:
+                fig2 = None
+
+            # ── Compare flux_max vs flux_balanced ───────────────────────────
+            try:
+                fig3, ax3 = plt.subplots(figsize=(6, 4))
+                x = np.arange(n_ch)
+                width = 0.35
+                ax3.bar(x - width/2, flux_max, width, label='max')
+                ax3.bar(x + width/2, flux_balanced, width, label='balanced')
+                ax3.set_xticks(x)
+                ax3.set_xticklabels([str(i) for i in range(n_ch)])
+                ax3.set_xlabel('Channel index')
+                ax3.set_ylabel('Flux (sum)')
+                ax3.set_title('Max vs Balanced Flux per Channel')
+                ax3.legend()
+                plt.tight_layout()
+                plt.show()
+            except Exception:
+                fig3 = None
+
+            return {'maps': fig, 'dichotomy': fig2, 'comparison': fig3}
         except Exception as exc:
             print(f"⚠️  Plot skipped: {exc}")
             return None
