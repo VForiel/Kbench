@@ -368,7 +368,10 @@ if __name__ == '__main__':
     # sleep(wait_seg)
     
     inj = phobos.Injection()
-    injection_maps, tt_ramp = inj.get_injection_maps(verbose=False)
-    ttamp = 3.
-    tilt_step = tip_step = np.diff(tt_ramp)[0]
-    out = inj.find_max_injection(injection_maps, tt_ramp, 1.)
+    avg_frame = 5
+    # injection_maps, tt_ramp = inj.get_injection_maps(avg_frames=avg_frame, verbose=False)
+    # ttamp = 3.
+    # out = inj.find_max_injection(injection_maps, tt_ramp, 1.)
+    # out2 = inj.find_balanced_injection(injection_maps, tt_ramp, ttamp, avg_frames=avg_frame, verbose=True)
+    
+    plop = inj.calibrate(verbose=True, plot=True)

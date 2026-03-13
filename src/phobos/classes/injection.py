@@ -332,48 +332,80 @@ class Injection(metaclass=Singleton):
            tt_ramp,
            nb_std: float,
            plot: bool = True,
+           verbose: bool = False
          ):
 
-        """
-        Find the maximum injection position (tip and tilt) for specific segments.
+        """Estimate per-channel maximum injection tip/tilt by two-pass 2D Gaussian fitting.
 
-        This method performs a two-pass 2D Gaussian fit on injection flux maps to
-        determine the optimal tip and tilt coordinates. The first pass identifies
-        the general "splodge" location, while the second pass refines the
-        measurement by fitting within a cropped region defined by a multiple
-        of the initial standard deviation.
+        Perform a robust two-stage estimation of the tip/tilt coordinates that
+        maximise the injected flux for each channel:
+
+        1. Coarse fit: fit a 2D Gaussian to the full channel map to obtain a
+        first estimate of the amplitude, centroid (tip, tilt), spreads and
+        orientation.
+        2. Crop & refine: define a cropping window around the coarse centroid
+        using `nb_std` × sigma from the coarse fit and perform a second 2D
+        Gaussian fit on the cropped data to improve centroid precision.
+        3. Compute diagnostics: generate model maps, residuals and chi-squared
+        for both passes. Optionally produce matplotlib figures for inspection.
 
         Parameters
         ----------
         injection_maps : ndarray
-            A 3D NumPy array of shape (n_segments, n_tt, n_tt) containing the
-            recorded flux intensity for each tip/tilt combination.
+            3D array of shape (n_channels, n_tt, n_tt) containing total output
+            flux measured for each tip/tilt grid point.
         tt_ramp : ndarray
-            A 1D NumPy array representing the tip and tilt coordinate values
-            (typically in mrad) used to generate the meshgrid for fitting.
+            1D array of tip/tilt coordinate values (mrad) used to build the maps.
         nb_std : float
-            The number of standard deviations from the first-pass fit used to
-            define the cropping window for the refined second-pass fit.
+            Number of standard deviations from the coarse fit sigma used to
+            define the cropping window for the refined fit (e.g. 1.0).
         plot : bool, optional
-            If True, generates diagnostic plots including the raw maps,
-            Gaussian models, and residuals for both the full and cropped data.
-            Default is True.
+            If True, generate diagnostic plots (maps, models, cropped fits and
+            residuals). Default is True.
+        verbose : bool, optional
+            Print progress and debugging information. Default is False.
 
         Returns
         -------
-        max_ptt : dict
-            A dictionary where keys are the segment indices (as strings) and
-            values are lists containing:
-            [piston_nm, optimal_tip, optimal_tilt].
+        dict
+            Dictionary with the following keys:
+
+            - 'max' : dict
+                Mapping from segment index (string) to [piston_nm, tip_mrad, tilt_mrad]
+                representing the refined maximum injection point.
+            - 'params' : ndarray
+                Coarse-fit parameter array (n_channels, n_params).
+            - 'params_cropped' : ndarray
+                Refined-fit parameter array for the cropped maps.
+            - 'models' : ndarray
+                Modeled maps from the coarse fits with same shape as injection_maps.
+            - 'cropped_data' : list
+                List of cropped data entries used for the refined fits.
+            - 'models_cropped' : list
+                List of refined-fit model maps and their grids.
+            - 'fig' : list
+                List of matplotlib Figures produced when `plot=True`. Elements may be
+                None if a particular plot failed to render.
+            - 'diag' : list
+                Convenience list of [tip_mrad, tilt_mrad] per channel extracted from
+                the refined fits.
 
         Notes
         -----
-        - The function assumes that `self._injection_segments` and a global
-          `Config` object providing 'dm.piston_range' are available.
-        - The 2D Gaussian model accounts for amplitude, position, sigma (spread),
-          rotation (theta), and a global offset.
-        - Chi-squared ($\chi^2$) values are calculated for both the gross and
-          fine fits to provide a measure of fit quality.
+        - The function expects channel indices to be provided by
+        `self._injection_segments` and uses `Config().get('dm.piston_range')`
+        to determine the piston applied to reporting values.
+        - Returned tip/tilt values are in milliradians (mrad).
+        - The fitting routine uses `scipy.optimize.curve_fit` and falls back to
+        zero-filled parameter arrays if the fit fails to converge for a channel.
+        - This routine does not modify DM state; it only analyses `injection_maps`.
+
+        Examples
+        --------
+        >>> inj = Injection()
+        >>> maps, tt = inj.get_injection_maps(grid_n=21, ttamp=2.0, avg_frames=2)
+        >>> result = inj.find_max_injection(maps, tt, nb_std=1.0, plot=True)
+        >>> max_positions = result['diag']  # list of [tip, tilt] per channel
         """
 
         def twoD_Gaussian(xy, amplitude, yo, xo, sigma_y, sigma_x, theta, offset):
@@ -542,6 +574,7 @@ class Injection(metaclass=Singleton):
         x, y = np.meshgrid(tt_ramp, tt_ramp) # tilt and tip
 
         # -- Find gross splodge's centroids and spread in tip and tilt
+        print("\n── Find gross TT for max injection and spread ──")
         params = []
         models = []
 
@@ -551,7 +584,9 @@ class Injection(metaclass=Singleton):
             params.append(popt)
             models.append(twoD_Gaussian((x, y), *popt).reshape(x.shape))
 
-            print(f"Injection spread of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[1]:.5f},{popt[2]:.5f}) ({popt[3]:.5f},{popt[4]:.5f}) mrad")
+            if verbose:
+                print(f"Injection max of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[1]:.5f},{popt[2]:.5f}) mrad")
+                print(f"Injection spread of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[3]:.5f},{popt[4]:.5f}) mrad")
 
         params = np.array(params)
         models = np.array(models)
@@ -559,6 +594,7 @@ class Injection(metaclass=Singleton):
         chi2 = np.sum(residuals**2, (1,2)) / (injection_maps[0].size - len(popt))
 
         # -- Find fine splodge's centroids and spread in tip and tilt
+        print("\n── Find precise TT for max injection ──")
         cropped_data = []
         params_cropped = []
         models_cropped = []
@@ -593,8 +629,9 @@ class Injection(metaclass=Singleton):
         Config().set('injection.max', max_tt, autosave=False)
         Config().save_to_file()
 
-        # print("✅ Injection calibration saved to config "
-        #       "(injection.max / injection.balanced)")
+        if verbose:
+            print("✅ Injection calibration saved to config "
+                "(injection.max)")
 
         figs = [None] * 6
         if plot:
@@ -630,7 +667,401 @@ class Injection(metaclass=Singleton):
                 'diag':max_tt}
 
 
-    def calibrate(
+    def find_balanced_injection(
+        self, 
+        injection_maps,
+        tt_ramp,
+        tilt_bound: float,
+        avg_frames: int,
+        tilt_tol: float = 1e-3,
+        plot: bool = True,
+        verbose: bool = False
+           ):
+        
+        """Find balanced injection positions using a dichotomy search on tilt.
+
+        Perform a balance procedure that equalises the output flux of all input
+        channels to the peak flux of the weakest channel. The algorithm:
+
+        1. Determine each channel's maximum flux position (tip, tilt) by
+        locating the brightest pixel in its injection map.
+        2. Identify the weakest channel (minimum peak flux) and use its peak
+        flux as the balancing target.
+        3. For every other channel, keep tip fixed at the channel's peak-tip and
+        perform a dichotomy (bisection) search on tilt to find the tilt value
+        that yields the target flux. The search moves away from the local peak
+        until the flux monotonically decreases and then bisects the interval
+        to converge to the target within `tilt_tol`.
+        4. Record diagnostic information suitable for plotting (per-channel
+        dichotomy evaluation history).
+
+        Parameters
+        ----------
+        injection_maps : ndarray
+            3D array with shape (n_channels, n_tt, n_tt) containing measured flux
+            values from the tip/tilt raster scans.
+        tt_ramp : ndarray
+            1D array of tip/tilt coordinate values (mrad) used to build the maps.
+        tilt_bound : float
+            Absolute tilt search bound (mrad). The dichotomy search interval is
+            clamped to [-tilt_bound, +tilt_bound].
+        avg_frames : int
+            Number of camera frames to average for each flux measurement.
+        tilt_tol : float, optional
+            Convergence tolerance on tilt (mrad) for the dichotomy. Default: 1e-3.
+        plot : bool, optional
+            If True, generate diagnostic figures (maps, dichotomy traces and flux
+            comparison). Default: True.
+        verbose : bool, optional
+            Enable verbose logging. Default: False.
+
+        Returns
+        -------
+        dict
+            Dictionary containing calibration and diagnostic results with keys:
+
+            - 'max' : list[list[float]]
+                Per-channel [tip_mrad, tilt_mrad] for the maximum-injection point.
+            - 'balanced' : list[list[float]]
+                Per-channel [tip_mrad, tilt_mrad] at the balanced positions.
+            - 'flux_max' : list[float]
+                Peak flux per channel at the max position.
+            - 'flux_balanced' : list[float]
+                Flux per channel at the balanced position.
+            - 'injection_maps' : ndarray
+                The original injection_maps argument (returned for convenience).
+            - 'tt_ramp' : ndarray
+                The original tt_ramp argument (returned for convenience).
+            - 'figure' : matplotlib.Figure or None
+                Backwards-compatible primary figure (maps) if `plot` is True.
+            - 'figures' : dict or None
+                Additional figures dictionary: e.g. {'maps', 'dichotomy', 'comparison'}.
+
+        Notes
+        -----
+        - All channel indices are 0-based and map to DM segments via the instance
+        configuration (injection.segments).
+        - The method uses self._measure_flux for camera averaging and
+        self._plot_calibration to generate figures when requested.
+        - The function persists results to Config keys 'injection.max' and
+        'injection.balanced' (Config.save_to_file is called).
+        - The dichotomy history is recorded and included in diagnostic plots to
+        visualise the evaluated tilt points and measured fluxes during the search.
+
+        Examples
+        --------
+        >>> inj = Injection()
+        >>> result = inj.find_balanced_injection(
+        ...     injection_maps=maps, tt_ramp=tt, tilt_bound=3.0, avg_frames=2,
+        ...     tilt_tol=1e-3, plot=True, verbose=False
+        ... )
+        >>> balanced_positions = result['balanced']
+        >>> fluxes = result['flux_balanced']
+        """        
+        segs = self._injection_segments
+        n_ch = len(segs)
+        piston_nm = float(np.mean(Config().get('dm.piston_range')))
+        camera = Cred3()
+        settle = float(Config().get('dm.stabilization_time', 0.01))
+
+        # ── Find max injection (brightest pixel) ─────────────────────
+        print("\n── Finding maximum injection points ──")
+
+        max_tt = [None] * n_ch  # [tip, tilt] per channel
+        flux_max = [0.0] * n_ch
+        tip_max_arr = np.empty(n_ch)
+        tilt_max_arr = np.empty(n_ch)
+
+        for ch_idx in range(n_ch):
+            seg = segs[ch_idx]
+            fmap = injection_maps[ch_idx]
+
+            # Brightest pixel
+            idx_flat = int(np.argmax(fmap))
+            i_max, j_max = np.unravel_index(idx_flat, fmap.shape)
+
+            best_tip = float(tt_ramp[i_max])
+            best_tilt = float(tt_ramp[j_max])
+            best_flux = float(fmap[i_max, j_max])
+
+            tip_max_arr[ch_idx] = best_tip
+            tilt_max_arr[ch_idx] = best_tilt
+            max_tt[ch_idx] = [best_tip, best_tilt]
+            flux_max[ch_idx] = best_flux
+
+        # ── Balanced injection via dichotomy on tilt ───────────────── 
+        print("\n── Balancing injection fluxes ──")
+
+        # Identify weakest channel
+        flux_max = np.max(injection_maps, axis=(1,2))
+        weak_ch = np.argmin(flux_max)
+        weak_seg = segs[weak_ch]
+        target_flux = flux_max[weak_ch]
+
+        if verbose:
+            print(
+                f"  Weakest channel: {weak_ch} (seg {weak_seg}), "
+                f"target flux = {target_flux:.4g}"
+            )
+
+        balanced_tt = [None] * n_ch  # [tip, tilt] per channel
+        flux_balanced = [0.0] * n_ch
+
+        # Record dichotomy evaluation history for diagnostic plotting. Each
+        # element is a dict with lists 'tilts' and 'fluxes' storing the
+        # evaluated tilts and corresponding fluxes during the bisection.
+        dichotomy_history = [{'tilts':[], 'fluxes':[]} for _ in range(n_ch)]
+
+        # The weakest channel stays at its max position
+        balanced_tt[weak_ch] = list(max_tt[weak_ch])
+        flux_balanced[weak_ch] = float(target_flux)
+
+        for ch_idx in range(n_ch):
+            seg = segs[ch_idx]
+            if ch_idx == weak_ch:
+                continue
+
+            if verbose:
+                print(f"  Dichotomy on channel {ch_idx} (seg {seg})…")
+
+            # Park all other channels
+            others = [c for c in range(n_ch) if c != ch_idx]
+            self.off(others)
+
+            # Fix tip at max-flux value
+            fixed_tip = float(tip_max_arr[ch_idx])
+            best_tilt = float(tilt_max_arr[ch_idx])
+
+            # Determine the search direction: we move tilt away from the peak
+            # towards positive tilt (arbitrary side choice).  If moving in the
+            # positive direction does not decrease flux, we try the negative
+            # direction instead.
+            tilt_bound_pos = tilt_bound
+            tilt_bound_neg = -tilt_bound
+
+            # Measure flux at peak position first.
+            self.dm.segments[seg].set_ptt(piston_nm, fixed_tip, best_tilt)
+            time.sleep(settle)
+            peak_flux = self._measure_flux(camera, avg_frames)
+
+            # store initial point (peak)
+            dichotomy_history[ch_idx]['tilts'].append(best_tilt)
+            dichotomy_history[ch_idx]['fluxes'].append(peak_flux)
+
+            # Try a small step in the positive tilt direction
+            test_tilt = min(best_tilt + 0.5, tilt_bound_pos)
+            self.dm.segments[seg].set_ptt(piston_nm, fixed_tip, test_tilt)
+            time.sleep(settle)
+            test_flux = self._measure_flux(camera, avg_frames)
+
+            # store the test point
+            dichotomy_history[ch_idx]['tilts'].append(test_tilt)
+            dichotomy_history[ch_idx]['fluxes'].append(test_flux)
+
+            if test_flux < peak_flux:
+                # Positive direction reduces flux → search [best_tilt, +ttamp]
+                # In this interval flux decreases monotonically from peak.
+                # lo = peak side (high flux), hi = far side (low flux).
+                search_sign = +1.0
+                lo_tilt = best_tilt
+                hi_tilt = tilt_bound_pos
+            else:
+                # Negative direction reduces flux → search [-ttamp, best_tilt]
+                search_sign = -1.0
+                lo_tilt = tilt_bound_neg
+                hi_tilt = best_tilt
+
+            # Dichotomy: we maintain the invariant
+            #   flux(lo_tilt) >= target_flux >= flux(hi_tilt)
+            # when search_sign > 0  (lo near peak, hi far away)
+            # and the symmetric when search_sign < 0.
+            n_iter = 0
+            max_iter = 50  # safety limit
+            while abs(hi_tilt - lo_tilt) > tilt_tol and n_iter < max_iter:
+                mid_tilt = (lo_tilt + hi_tilt) / 2.0
+                self.dm.segments[seg].set_ptt(piston_nm, fixed_tip, mid_tilt)
+                time.sleep(settle)
+                mid_flux = self._measure_flux(camera, avg_frames)
+
+                # record mid-point evaluation for diagnostics
+                dichotomy_history[ch_idx]['tilts'].append(mid_tilt)
+                dichotomy_history[ch_idx]['fluxes'].append(mid_flux)
+
+                if search_sign > 0:
+                    # lo is near peak (high flux), hi is far (low flux)
+                    if mid_flux > target_flux:
+                        lo_tilt = mid_tilt  # move away from peak
+                    else:
+                        hi_tilt = mid_tilt  # move closer to peak
+                else:
+                    # lo is far (low flux), hi is near peak (high flux)
+                    if mid_flux > target_flux:
+                        hi_tilt = mid_tilt  # move away from peak
+                    else:
+                        lo_tilt = mid_tilt  # move closer to peak
+
+                n_iter += 1
+
+            # Final measurement at converged point
+            bal_tilt = (lo_tilt + hi_tilt) / 2.0
+            self.dm.segments[seg].set_ptt(piston_nm, fixed_tip, bal_tilt)
+            time.sleep(settle)
+            bal_flux = self._measure_flux(camera, avg_frames)
+
+            # store final converged point
+            dichotomy_history[ch_idx]['tilts'].append(bal_tilt)
+            dichotomy_history[ch_idx]['fluxes'].append(bal_flux)
+
+            balanced_tt[ch_idx] = [fixed_tip, bal_tilt]
+            flux_balanced[ch_idx] = bal_flux
+
+            if verbose:
+                print(
+                    f"    → balanced tilt = {bal_tilt:.4f} mrad, "
+                    f"flux = {bal_flux:.4g} (target {target_flux:.4g}), "
+                    f"iterations = {n_iter}"
+                )
+
+        # Park everything and restore flat
+        self.flat()
+
+        # ── Persist to config ────────────────────────────────────────────────
+        Config().set('injection.balanced', balanced_tt, autosave=False)
+        Config().save_to_file()
+
+        print("✅ Injection calibration saved to config "
+              "(injection.balanced)")
+        
+        # ── Plot ─────────────────────────────────────────────────────────────
+        fig = None
+        fig_dict = None
+        if plot:
+            fig_dict = self._plot_calibration(
+                injection_maps, tt_ramp, segs,
+                max_tt, balanced_tt, flux_max, flux_balanced,
+                dichotomy_history=dichotomy_history,
+                target_flux=target_flux
+            )
+            # Backwards-compatible primary figure (maps)
+            if isinstance(fig_dict, dict):
+                fig = fig_dict.get('maps')
+            else:
+                fig = fig_dict
+
+        return {
+            'balanced': balanced_tt,
+            'flux_balanced': flux_balanced,
+            'max': max_tt,
+            'flux_max': flux_max,
+            'figure': fig,
+            'figures': fig_dict,
+        }
+    
+    def calibrate(self,
+        grid_n: int = 31,
+        ttamp: float = 3.0,
+        avg_frames: int = 1,
+        nb_std: float = 1.0,
+        tilt_bound: float = 3.0,
+        tilt_tol: float = 1e-3,
+        use_tqdm: bool = True,
+        plot: bool = False,
+        verbose: bool = False
+    ):
+
+        """Calibrate injection tip/tilt positions for all input channels.
+
+        Perform a complete injection calibration consisting of:
+        1) A 2-D raster scan of tip × tilt for each channel while other
+        channels are parked, producing per-channel flux maps.
+        2) A two-stage Gaussian fitting on each map to estimate the tip/tilt
+        coordinates of the flux maximum ("max" positions).
+        3) A flux balancing stage where the weakest channel (lowest peak flux)
+        is used as a reference and remaining channels undergo a dichotomy
+        search on tilt (with tip fixed at their per-channel maximum) to
+        equalise their output fluxes to the weakest channel's peak.
+
+        The method stores the resulting calibration entries in the global
+        configuration under the keys ``injection.max`` and ``injection.balanced``
+        and returns diagnostic data and figures.
+
+        Parameters
+        ----------
+        grid_n : int, optional
+            Number of sample points per axis for the tip/tilt raster scan.
+            Default is 31.
+        ttamp : float, optional
+            Half-range of the tip/tilt scan in mrad (scan from -ttamp to +ttamp).
+            Default is 3.0 mrad.
+        avg_frames : int, optional
+            Number of camera frames to average per measurement point. Default is 1.
+        nb_std : float, optional
+            Number of standard deviations used to crop the region for the
+            second (refined) Gaussian fit. Default is 1.0.
+        tilt_bound : float, optional
+            Absolute tilt bound (mrad) used as search limit during dichotomy.
+            Default is 3.0 mrad.
+        tilt_tol : float, optional
+            Convergence tolerance on tilt (mrad) for the dichotomy search.
+            Default is 1e-3 mrad.
+        use_tqdm : bool, optional
+            Show a progress bar when scanning maps if ``tqdm`` is available.
+            Default is True.
+        plot : bool, optional
+            If True, generate diagnostic figures (maps, models, dichotomy traces,
+            and flux comparison). Default is False.
+        verbose : bool, optional
+            Print progress and debug information. Default is False.
+
+        Returns
+        -------
+        dict
+            A dictionary containing calibration results and diagnostic data with
+            the following keys:
+
+            - 'injection_maps' : ndarray
+                The raw flux maps of shape (n_channels, grid_n, grid_n).
+            - 'tt_ramp' : ndarray
+                1-D array of tip/tilt values (mrad) used for the scan axes.
+            - 'max_inj' : dict
+                Output of the max-finding routine (fitted piston, tip, tilt).
+            - 'bal_data' : dict
+                Output of the balancing routine containing:
+                - 'balanced' : list[list[float]] — per-channel [tip, tilt] at balanced positions.
+                - 'flux_balanced' : list[float] — flux per channel at balanced positions.
+                - 'max' : list[list[float]] — per-channel [tip, tilt] at max positions.
+                - 'flux_max' : list[float] — peak flux per channel.
+                - 'figure' : matplotlib.Figure or None — primary figure (maps) if plot=True.
+                - 'figures' : dict or None — additional figures (dichotomy, comparison) if plot=True.
+
+        Notes
+        -----
+        - The method uses the camera interface (Cred3) and the DM segments mapped
+        via the configuration key ``injection.segments``.
+        - All channel indices are 0-based.
+        - Calibration data are saved to the persistent Config but returned as well.
+        - The dichotomy search keeps tip constant at each channel's max-tip and
+        searches on tilt to match the weakest channel's peak flux.
+
+        Examples
+        --------
+        >>> inj = Injection()
+        >>> result = inj.calibrate(grid_n=21, ttamp=2.0, avg_frames=2, plot=True)
+        >>> maps = result['injection_maps']
+        >>> balanced_positions = result['bal_data']['balanced']
+        """
+        injection_maps, tt_ramp = self.get_injection_maps(grid_n, ttamp, avg_frames, use_tqdm, verbose)
+        max_data = self.find_max_injection(injection_maps, tt_ramp, nb_std, plot, verbose)
+        balanced_data = self.find_balanced_injection(injection_maps, tt_ramp, 
+                                                     tilt_bound, avg_frames, 
+                                                     tilt_tol, plot, verbose)
+        
+        return {'injection_maps':injection_maps, 
+                'tt_ramp':tt_ramp,
+                'max_inj':max_data,
+                'bal_data':balanced_data}
+
+    def calibrate_old(
         self,
         grid_n: int = 31,
         ttamp: float = 3.0,
@@ -912,7 +1343,7 @@ class Injection(metaclass=Singleton):
             'max': max_tt,
             'balanced': balanced_tt,
             'flux_max': flux_max,
-            'flux_balanced': flux_balanced,
+            'flux_balanced': np.array(flux_balanced),
             'injection_maps': injection_maps,
             'tt_ramp': tt_ramp,
             'figure': fig,
@@ -922,7 +1353,7 @@ class Injection(metaclass=Singleton):
     # -- private helpers ------------------------------------------------------
 
     @staticmethod
-    def _measure_flux(camera: 'Cred3', avg_frames: int = 1) -> float:
+    def _measure_flux(camera: 'Cred3', avg_frames: int = 1, flux_mode: str = 'mean') -> float:
         """Measure total output flux (sum of all camera outputs).
 
         Parameters
@@ -937,9 +1368,9 @@ class Injection(metaclass=Singleton):
         float
             Total output flux.
         """
-        flux = np.zeros_like(camera.get_outputs(flux_mode='sum'))
+        flux = np.zeros_like(camera.get_outputs(flux_mode=flux_mode))
         for _ in range(avg_frames):
-            flux += camera.get_outputs(flux_mode='sum')
+            flux += camera.get_outputs(flux_mode=flux_mode)
         flux /= float(avg_frames)
         return float(np.sum(flux))
 
@@ -953,6 +1384,7 @@ class Injection(metaclass=Singleton):
         flux_max: List[float],
         flux_balanced: List[float],
         dichotomy_history: List[dict] = None,
+        target_flux: Optional[float] = None
     ):
         """Generate diagnostic plots for the calibration.
 
@@ -972,14 +1404,24 @@ class Injection(metaclass=Singleton):
             Flux at max position per channel.
         flux_balanced : list[float]
             Flux at balanced position per channel.
+        dichotomy_history : list of dict, optional
+            Diagnostic history recorded during per-channel dichotomy searches.
+            Each element corresponds to a channel and is a dict with keys:
+            - 'tilts': list of tested tilt values (mrad),
+            - 'fluxes': list of measured total fluxes at the corresponding tilts.
+            When provided, these points are overlaid on the dichotomy evolution plots.
+            Default is None.
+        target_flux : float or None, optional
+            Target flux used for balancing (typically the peak flux of the weakest
+            channel). If provided, a horizontal dashed line at this value is drawn
+            on the comparison plot to visualise the balancing target. Default is None.
+
 
         Returns
         -------
         matplotlib.figure.Figure or None
         """
         try:
-            import matplotlib.pyplot as plt
-
             n_ch = len(segs)
             step = float(tt_ramp[1] - tt_ramp[0]) if len(tt_ramp) > 1 else 1.0
             e = float(tt_ramp[-1]) + step / 2.0
@@ -1075,6 +1517,8 @@ class Injection(metaclass=Singleton):
                 width = 0.35
                 ax3.bar(x - width/2, flux_max, width, label='max')
                 ax3.bar(x + width/2, flux_balanced, width, label='balanced')
+                if target_flux is not None:
+                    ax3.axhline(float(target_flux), color='black', linestyle='--', linewidth=1.5, label='target')
                 ax3.set_xticks(x)
                 ax3.set_xticklabels([str(i) for i in range(n_ch)])
                 ax3.set_xlabel('Channel index')
