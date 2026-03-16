@@ -1018,7 +1018,7 @@ class Injection(metaclass=Singleton):
         verbose : bool, optional
             Print progress and debug information. Default is False.
         save_path: str, optional
-            Path to directory where to save the telemetry
+            Path to directory where to save the diagnostic data
 
         Returns
         -------
@@ -1049,8 +1049,8 @@ class Injection(metaclass=Singleton):
         - Calibration data are saved to the persistent Config but returned as well.
         - The dichotomy search keeps tip constant at each channel's max-tip and
         searches on tilt to match the weakest channel's peak flux.
-        - In the directory to save the telemetry, a subdirectory of the date of creation will be made and the telemetry will be stored inside
-        - The telemetry consists of a FITS file with the TT injection map, its axes, gross centroids and width in tip and tilt
+        - In the directory to save the diagnostic, a subdirectory of the date of creation will be made and the diagnostic data will be stored inside
+        - The diagnostic consists of a FITS file with the TT injection map, its axes, gross centroids and width in tip and tilt
 
         Examples
         --------
