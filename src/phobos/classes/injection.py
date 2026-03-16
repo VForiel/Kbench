@@ -24,6 +24,10 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
+from astropy.io import fits
+from datetime import datetime
+from pathlib import Path
+import os
 
 from ..utils import Singleton
 from .config import Config
@@ -617,8 +621,8 @@ class Injection(metaclass=Singleton):
             models_cropped.append([twoD_Gaussian((x, y), *popt).reshape(tt_map.shape), cropped_tip, cropped_tilt])
             best_tip, best_tilt = float(popt[1]), float(popt[2])
 
-            max_ptt[str(injection_seg_indices[i])] = [piston_nm, best_tip, best_tilt]
-            max_tt.append([best_tip, best_tilt])
+            max_ptt[str(injection_seg_indices[i])] = np.array([piston_nm, best_tip, best_tilt])
+            max_tt.append(np.array([best_tip, best_tilt]))
 
             print(f"Injection max of seg={injection_seg_indices[i]}: (tip, tilt) = ({best_tip:.5f},{best_tilt:.5f}) mrad; flux = {popt[0]:.4g}")
 
@@ -668,7 +672,7 @@ class Injection(metaclass=Singleton):
 
 
     def find_balanced_injection(
-        self, 
+        self,
         injection_maps,
         tt_ramp,
         tilt_bound: float,
@@ -677,7 +681,7 @@ class Injection(metaclass=Singleton):
         plot: bool = True,
         verbose: bool = False
            ):
-        
+
         """Find balanced injection positions using a dichotomy search on tilt.
 
         Perform a balance procedure that equalises the output flux of all input
@@ -757,7 +761,7 @@ class Injection(metaclass=Singleton):
         ... )
         >>> balanced_positions = result['balanced']
         >>> fluxes = result['flux_balanced']
-        """        
+        """
         segs = self._injection_segments
         n_ch = len(segs)
         piston_nm = float(np.mean(Config().get('dm.piston_range')))
@@ -789,7 +793,7 @@ class Injection(metaclass=Singleton):
             max_tt[ch_idx] = [best_tip, best_tilt]
             flux_max[ch_idx] = best_flux
 
-        # ── Balanced injection via dichotomy on tilt ───────────────── 
+        # ── Balanced injection via dichotomy on tilt ─────────────────
         print("\n── Balancing injection fluxes ──")
 
         # Identify weakest channel
@@ -931,7 +935,7 @@ class Injection(metaclass=Singleton):
 
         print("✅ Injection calibration saved to config "
               "(injection.balanced)")
-        
+
         # ── Plot ─────────────────────────────────────────────────────────────
         fig = None
         fig_dict = None
@@ -956,7 +960,7 @@ class Injection(metaclass=Singleton):
             'figure': fig,
             'figures': fig_dict,
         }
-    
+
     def calibrate(self,
         grid_n: int = 31,
         ttamp: float = 3.0,
@@ -966,7 +970,8 @@ class Injection(metaclass=Singleton):
         tilt_tol: float = 1e-3,
         use_tqdm: bool = True,
         plot: bool = False,
-        verbose: bool = False
+        verbose: bool = False,
+        save_path = None
     ):
 
         """Calibrate injection tip/tilt positions for all input channels.
@@ -1012,6 +1017,8 @@ class Injection(metaclass=Singleton):
             and flux comparison). Default is False.
         verbose : bool, optional
             Print progress and debug information. Default is False.
+        save_path: str, optional
+            Path to directory where to save the telemetry
 
         Returns
         -------
@@ -1042,6 +1049,8 @@ class Injection(metaclass=Singleton):
         - Calibration data are saved to the persistent Config but returned as well.
         - The dichotomy search keeps tip constant at each channel's max-tip and
         searches on tilt to match the weakest channel's peak flux.
+        - In the directory to save the telemetry, a subdirectory of the date of creation will be made and the telemetry will be stored inside
+        - The telemetry consists of a FITS file with the TT injection map, its axes, gross centroids and width in tip and tilt
 
         Examples
         --------
@@ -1052,11 +1061,29 @@ class Injection(metaclass=Singleton):
         """
         injection_maps, tt_ramp = self.get_injection_maps(grid_n, ttamp, avg_frames, use_tqdm, verbose)
         max_data = self.find_max_injection(injection_maps, tt_ramp, nb_std, plot, verbose)
-        balanced_data = self.find_balanced_injection(injection_maps, tt_ramp, 
-                                                     tilt_bound, avg_frames, 
+        balanced_data = self.find_balanced_injection(injection_maps, tt_ramp,
+                                                     tilt_bound, avg_frames,
                                                      tilt_tol, plot, verbose)
-        
-        return {'injection_maps':injection_maps, 
+
+        if save_path is not None:
+            images_info = [{'data':injection_maps, 'extname':'TT map', 'segments':",".join(map(str, self._injection_segments))}]
+            tables_info = [{'extname':'TT axes', 'columns':[('tip', 'D', tt_ramp), ('tilt', 'D', tt_ramp)]},
+                           {'extname':'Centroids (mrad)', 'columns':[('segments', 'J', self._injection_segments),
+                                                                     ('tip', 'D', max_data['max_ptt'][:,1]),
+                                                                     ('tilt', 'D', max_data['max_ptt'][:,2])]},
+                           {'extname':'Width (mrad)', 'columns':[('segments', 'J', self._injection_segments),
+                                                                  ('tip', 'D', max_data['params'][:,3]),
+                                                                  ('tilt', 'D', max_data['params'][:,4])]}]
+
+            if save_path[:-1] != '/':
+                save_path = save_path + '/'
+
+            save_path = save_path + 'injection_calibration_' + datetime.now().strftime("%Y-%m-%d") + '/'
+            filename = save_path + 'injection_telemetry_' + datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + '.fits'
+
+            self.save_telemetry(filename, images_info, tables_info)
+
+        return {'injection_maps':injection_maps,
                 'tt_ramp':tt_ramp,
                 'max_inj':max_data,
                 'bal_data':balanced_data}
@@ -1349,6 +1376,77 @@ class Injection(metaclass=Singleton):
             'figure': fig,
             'figures': fig_dict,
         }
+
+    def save_telemetry(self, filename, images_info, tables_info):
+        """
+            Saves multiple images and multiple tables to a single FITS file.
+
+            Parameters:
+            -----------
+            filename : str
+                The path and name of the output FITS file.
+            images_info : list of dict
+                A list representing the images to save.
+                Format: [{'data': array, 'extname': 'NAME', 'timestamp': 'Optional custom time'}, ...]
+            tables_info : list of dict
+                A list representing the table extensions.
+                Format: [{'extname': 'NAME', 'columns': [('label', 'format', array), ...]}, ...]
+        """
+
+        # Ensure the directory exists before doing anything else
+        Path(filename).parent.mkdir(parents=True, exist_ok=True)
+
+        # Timestamp of the FITS file
+        timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+        # Put images in FITS
+        hdulist = []
+        first_img = images_info[0]
+        primary_hdu = fits.PrimaryHDU(data=first_img['data'])
+        primary_hdu.header['timestamp'] = (timestamp, 'Date of FITS creation of FITS')
+
+        if 'extname' in first_img.keys():
+            primary_hdu.header['EXTNAME'] = first_img['extname']
+
+        for key, value in first_img.items():
+            if key != 'data' and key != 'extname':
+                primary_hdu.header[key] = value
+
+        hdulist.append(primary_hdu)
+
+        for img in images_info[1:]:
+            image_hdu = fits.ImageHDU(data=img['data'])
+
+            if 'extname' in img.keys():
+                image_hdu.header['EXTNAME'] = img['extname']
+
+            for key, value in img.items():
+                if key != 'data' and key != 'extname':
+                    image_hdu.header[key] = value
+
+            hdulist.append(image_hdu)
+
+        # Put tables in FITS
+        for table in tables_info:
+            fits_columns = []
+
+            for col_name, col_format, col_array in table['columns']:
+                        fits_column = fits.Column(name=col_name, format=col_format, array=col_array)
+                        fits_columns.append(fits_column)
+
+            coldefs = fits.ColDefs(fits_columns)
+            table_hdu = fits.BinTableHDU.from_columns(coldefs)
+
+            if 'extname' in table:
+                table_hdu.name = table['extname']
+
+            hdulist.append(table_hdu)
+
+        # Save FITS
+        hdul = fits.HDUList(hdulist)
+        hdul.writeto(filename, overwrite=True)
+
+        print("Successfully saved in FITS")
 
     # -- private helpers ------------------------------------------------------
 
