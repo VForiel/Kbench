@@ -630,7 +630,7 @@ class Injection(metaclass=Singleton):
         residuals_cropped = [cropped_data[i][0] - models_cropped[i][0] for i in range(len(cropped_data))]
         chi2_cropped = [np.sum(residuals_cropped[i]**2) / (cropped_data[i][0].size - len(params_cropped[i])) for i in range(len(residuals))]
 
-        Config().set('injection.max', max_tt, autosave=False)
+        Config().set('injection.max', np.array(max_tt).tolist(), autosave=False)
         Config().save_to_file()
 
         if verbose:
@@ -930,7 +930,7 @@ class Injection(metaclass=Singleton):
         self.flat()
 
         # ── Persist to config ────────────────────────────────────────────────
-        Config().set('injection.balanced', balanced_tt, autosave=False)
+        Config().set('injection.balanced', np.array(balanced_tt).tolist(), autosave=False)
         Config().save_to_file()
 
         print("✅ Injection calibration saved to config "
@@ -1344,8 +1344,8 @@ class Injection(metaclass=Singleton):
         self.flat()
 
         # ── Persist to config ────────────────────────────────────────────────
-        Config().set('injection.max', max_tt, autosave=False)
-        Config().set('injection.balanced', balanced_tt, autosave=False)
+        Config().set('injection.max', np.array(max_tt).tolist(), autosave=False)
+        Config().set('injection.balanced', np.array(balanced_tt).tolist(), autosave=False)
         Config().save_to_file()
 
         print("✅ Injection calibration saved to config "
@@ -1572,10 +1572,9 @@ class Injection(metaclass=Singleton):
 
             # ── Dichotomy evolution at fixed tip (profile slice) ───────────
             try:
-                fig2, axs2 = plt.subplots(1, n_ch, figsize=(4 * n_ch, 3))
+                fig2, axs2 = plt.subplots(1, n_ch, figsize=(4 * n_ch, 3), sharey=True)
                 if n_ch == 1:
                     axs2 = [axs2]
-
                 for ch_idx, ax in enumerate(axs2):
                     seg = segs[ch_idx]
                     tip_m, tilt_m = max_tt[ch_idx]
@@ -1593,11 +1592,33 @@ class Injection(metaclass=Singleton):
                             ax.plot(h['tilts'], h['fluxes'], '-o', color='C1',
                                     label='dichotomy evals')
 
+                    # balanced target as horizontal guide
+                    if target_flux is not None:
+                        ax.axhline(float(target_flux), color='black', linestyle='--',
+                                   linewidth=1, alpha=0.7, label='target flux')
+
                     # mark max and balanced
                     ax.scatter([tilt_m], [flux_max[ch_idx]], marker='^', color='C2',
-                               s=80, edgecolors='black', label='max')
+                               s=80, edgecolors='black', label='max', zorder=5)
                     ax.scatter([tilt_b], [flux_balanced[ch_idx]], marker='o', color='C3',
-                               s=60, edgecolors='black', label='balanced')
+                               s=80, edgecolors='black', label='balanced', zorder=10)
+
+                    # fix y dynamic per channel with a small margin
+                    y_vals = [np.asarray(profile, dtype=float),
+                              np.asarray([flux_max[ch_idx], flux_balanced[ch_idx]], dtype=float)]
+                    if target_flux is not None:
+                        y_vals.append(np.asarray([float(target_flux)], dtype=float))
+                    if dichotomy_history and len(dichotomy_history) > ch_idx:
+                        h = dichotomy_history[ch_idx]
+                        if h and len(h.get('fluxes', [])) > 0:
+                            y_vals.append(np.asarray(h['fluxes'], dtype=float))
+
+                    y_all = np.concatenate(y_vals)
+                    y_min = float(np.nanmin(y_all))
+                    y_max = float(np.nanmax(y_all))
+                    dy = max(1e-12, y_max - y_min)
+                    margin = 0.08 * dy
+                    ax.set_ylim(y_min - margin, y_max + margin)
 
                     ax.set_xlabel('Tilt (mrad)')
                     ax.set_title(f'Ch {ch_idx} (seg {seg})')
