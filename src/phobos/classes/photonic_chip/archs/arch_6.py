@@ -524,6 +524,7 @@ class Arch6(Arch, metaclass=Singleton):
         n_measures: int = 1,
         aggregate_method = np.median,
         total_flux = None,
+        avg_frames = 1
     ) -> dict:
         """
         Optimize phase shifter offsets to maximize nulling performance (minimize Null-Depth).
@@ -557,6 +558,8 @@ class Arch6(Arch, metaclass=Singleton):
             Aggregation method for repeated measurements. Default is np.median.
         total_flux : float, optional
             If provided, the metric will be computed using the formula: max_null / (total_flux - max_null) instead of max_null / bright to avoid camera saturation issues. This can be useful when the bright output is saturated but the total flux is known from separate measurements.
+        avg_frames : int, optional
+            Number of frames to average for each measurement. Default is 1.
         Returns
         -------
         dict
@@ -627,7 +630,7 @@ class Arch6(Arch, metaclass=Singleton):
 
             outs_list = []
             for _ in range(n):
-                outs_list.append(Cred3().get_outputs(flux_mode='sum'))
+                outs_list.append(Cred3().get_outputs(flux_mode='sum', stack=avg_frames))
             outs_stack = np.array(outs_list)
 
             # Aggregate outputs over measurements
