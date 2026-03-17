@@ -78,8 +78,8 @@ class Cred3(metaclass=Singleton):
             mode_prefix = "⛱️ [SANDBOX] " if SANDBOX_MODE else ""
             print(f"{mode_prefix}Cred3 camera initialized without dark subtraction")
 
-    
-    def get_image(self, subtract_dark: bool = True) -> np.ndarray:
+
+    def get_image(self, subtract_dark: bool = True, stack: int = 1) -> np.ndarray:
         """
         Get the latest image from the shared memory.
         
@@ -88,6 +88,8 @@ class Cred3(metaclass=Singleton):
         subtract_dark : bool, optional
             If True, subtract the dark frame. If None, uses the default
             set during initialization. Default is True.
+        stack : int, optional
+            Number of frames to stack for averaging. Default is 1.
         
         Returns
         -------
@@ -100,7 +102,12 @@ class Cred3(metaclass=Singleton):
         >>> img = camera.get_image()
         >>> img_no_dark = camera.get_image(subtract_dark=False)
         """
-        img = self.cam.get_latest_data(self.semid)
+        
+        imgs = []
+        for _ in range(stack):
+            img = self.cam.get_latest_data(self.semid)
+            imgs.append(img)
+        img = np.mean(imgs, axis=0)
         
         # Determine whether to subtract dark
         if subtract_dark is None:
@@ -196,7 +203,9 @@ class Cred3(metaclass=Singleton):
 
     def get_outputs(self,
                    subtract_dark: bool = True,
-                   flux_mode: str = 'mean') -> np.ndarray:
+                   flux_mode: str = 'mean',
+                   stack=1,
+                   ) -> np.ndarray:
         """
         Get the flux around configured output centers.
         
@@ -212,6 +221,8 @@ class Cred3(metaclass=Singleton):
             Method to compute the flux. 
             'mean': average of pixel values (default)
             'sum': sum of pixel values
+        stack : int, optional
+            Number of frames to stack for averaging. Default is 1.
         
         Returns
         -------
@@ -235,7 +246,7 @@ class Cred3(metaclass=Singleton):
             raise ValueError("output_centers not configured. Please set them in phobos.config")
             
         # Get the latest image
-        img = self.get_image(subtract_dark=subtract_dark)
+        img = self.get_image(subtract_dark=subtract_dark, stack=stack)
         
         crops = self.crop_outputs_from_image(img)
         
