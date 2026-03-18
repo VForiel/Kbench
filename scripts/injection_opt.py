@@ -204,8 +204,8 @@ if __name__ == '__main__':
                         (378, 323),
                         (409, 323)])
     
-    # check_cropping(crop_centers, crop_size)
-    # ppp
+    check_cropping(crop_centers, crop_size)
+    ppp
 
     if not os.path.exists(save_path0):
         os.mkdir(save_path0)

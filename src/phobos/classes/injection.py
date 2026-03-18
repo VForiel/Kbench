@@ -661,14 +661,14 @@ class Injection(metaclass=Singleton):
             seg_max = params[:,1:3]
             figs[5] = plot_fit(data, seg_max, 'Cropped residuals')
 
-        return {'max':max_ptt,
+        return {'max_ptt':max_ptt,
                 'params':params,
                 'params_cropped':params_cropped,
                 'models':models,
                 'cropped_data':cropped_data,
                 'models_cropped':models_cropped,
                 'fig':figs,
-                'diag':max_tt}
+                'max_tt':np.array(max_tt)}
 
 
     def find_balanced_injection(
@@ -1017,7 +1017,7 @@ class Injection(metaclass=Singleton):
             and flux comparison). Default is False.
         verbose : bool, optional
             Print progress and debug information. Default is False.
-        save_path: str, optional
+        save_path: Path object, optional
             Path to directory where to save the diagnostic data
 
         Returns
@@ -1069,17 +1069,14 @@ class Injection(metaclass=Singleton):
             images_info = [{'data':injection_maps, 'extname':'TT map', 'segments':",".join(map(str, self._injection_segments))}]
             tables_info = [{'extname':'TT axes', 'columns':[('tip', 'D', tt_ramp), ('tilt', 'D', tt_ramp)]},
                            {'extname':'Centroids (mrad)', 'columns':[('segments', 'J', self._injection_segments),
-                                                                     ('tip', 'D', max_data['max_ptt'][:,1]),
-                                                                     ('tilt', 'D', max_data['max_ptt'][:,2])]},
+                                                                     ('tip', 'D', max_data['max_tt'][:,0]),
+                                                                     ('tilt', 'D', max_data['max_tt'][:,1])]},
                            {'extname':'Width (mrad)', 'columns':[('segments', 'J', self._injection_segments),
                                                                   ('tip', 'D', max_data['params'][:,3]),
                                                                   ('tilt', 'D', max_data['params'][:,4])]}]
 
-            if save_path[:-1] != '/':
-                save_path = save_path + '/'
-
-            save_path = save_path + 'injection_calibration_' + datetime.now().strftime("%Y-%m-%d") + '/'
-            filename = save_path + 'injection_telemetry_' + datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + '.fits'
+            name = 'injection_telemetry_' + datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + '.fits'
+            filename = save_path / name
 
             self.save_telemetry(filename, images_info, tables_info)
 
