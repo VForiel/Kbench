@@ -521,8 +521,6 @@ class Arch6(Arch, metaclass=Singleton):
         save_as=None,
         use_dm: bool = False,
         lam: float = 1550.0,
-        n_measures: int = 1,
-        aggregate_method = np.median,
         total_flux = None,
         avg_frames = 1
     ) -> dict:
@@ -550,12 +548,6 @@ class Arch6(Arch, metaclass=Singleton):
         lam : float, optional
             Wavelength in nanometers used to convert phase steps to piston (nm)
             when ``use_dm=True``. Default is 1550.
-        n_measures : int, optional
-            Number of camera measurements to take for each metric evaluation.
-            The outputs are aggregated before comparing the three states
-            (negative / current / positive). Default is 1.
-        aggregate_method : Callable[[np.ndarray], np.ndarray], optional
-            Aggregation method for repeated measurements. Default is np.median.
         total_flux : float, optional
             If provided, the metric will be computed using the formula: max_null / (total_flux - max_null) instead of max_null / bright to avoid camera saturation issues. This can be useful when the bright output is saturated but the total flux is known from separate measurements.
         avg_frames : int, optional
@@ -586,11 +578,6 @@ class Arch6(Arch, metaclass=Singleton):
         """
         
         bright_output = Config().get('photonic_chip.bright_output', 0)
-        
-        # Validate n_measures
-        n = int(n_measures)
-        if n < 1:
-            raise ValueError("n_measures must be >= 1")
         
         # Initial step size
         ε = 1e-4 # Minimum shift step size in radians
@@ -628,30 +615,23 @@ class Arch6(Arch, metaclass=Singleton):
 
         def get_metric(ret_outputs=False) -> float:
 
-            outs_list = []
-            for _ in range(n):
-                outs_list.append(Cred3().get_outputs(flux_mode='sum', stack=avg_frames))
-            outs_stack = np.array(outs_list)
+            # Get output image and size of output sub-frames
+            im = Cred3().get_image(stack=avg_frames)
+            window_size = Config().get('cred3.output_sizes')
 
-            # Aggregate outputs over measurements
-            outs = aggregate_method(outs_stack, axis=0)
-            outs[outs < 1e-10] = 1e-10  # Filter negative value (noise) and zeros
+            # Reduce sub-frame to get only the core integrated flux
+            Config().set('cred3.output_sizes', 3, autosave=False)
+            outs = np.sum(Cred3().crop_outputs_from_image(im), axis=(1, 2))
+
+            # Set back output size
+            Config().set('cred3.output_sizes', window_size, autosave=False)
 
             b_meas = outs[bright_output]
 
             # Remove bright output from outs
             nulls = np.delete(outs, int(bright_output))
 
-            max_null = np.max(nulls)
-            sum_null = np.sum(nulls)
-            
-            #if total_flux is not None:
-            #    metric = max_null / (total_flux - np.sum(nulls))  # Avoid using bright output if total flux is known to prevent saturation issues
-            #else:
-            #    metric = max_null / b_meas
-
-            #metric = max_null
-            metric = sum_null
+            metric = np.sum(nulls)
 
             if ret_outputs:
                 return metric, b_meas, nulls
