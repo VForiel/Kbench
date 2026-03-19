@@ -615,26 +615,15 @@ class Arch6(Arch, metaclass=Singleton):
 
         def get_metric(ret_outputs=False) -> float:
 
-            # Get output image and size of output sub-frames
-            im = Cred3().get_image(stack=avg_frames)
-            window_size = Config().get('cred3.output_sizes')
+            outs = Cred3().get_outputs(flux_mode='sum')
 
-            # Reduce sub-frame to get only the core integrated flux
-            Config().set('cred3.output_sizes', 3, autosave=False)
-            outs = np.sum(Cred3().crop_outputs_from_image(im), axis=(1, 2))
-
-            # Set back output size
-            Config().set('cred3.output_sizes', window_size, autosave=False)
-
-            b_meas = outs[bright_output]
-
-            # Remove bright output from outs
+            bright = outs[bright_output]
             nulls = np.delete(outs, int(bright_output))
 
             metric = np.sum(nulls)
 
             if ret_outputs:
-                return metric, b_meas, nulls
+                return metric, bright, nulls
             return metric
 
         import time
