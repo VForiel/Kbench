@@ -193,7 +193,7 @@ class PhaseShifter:
             )
             phase_factor = 1.0  # Default guess if not calibrated
 
-        power = phase * phase_factor
+        power = (phase % (2*np.pi)) * phase_factor
 
         # Apply the power
         self.set_power(power, verbose=verbose)
