@@ -254,6 +254,7 @@ class Injection(metaclass=Singleton):
         grid_n: int = 31,
         ttamp: float = 3.0,
         avg_frames: int = 1,
+        nb_outputs: int = 4,
         use_tqdm: bool = True,
         verbose: bool = False,
     ) -> Tuple[np.ndarray, np.ndarray]:
@@ -272,6 +273,9 @@ class Injection(metaclass=Singleton):
             Default is 3.0.
         avg_frames : int, optional
             Number of camera frames to average per point.  Default is 1.
+        nb_outputs : int, optional
+            Number of outputs of the chip to include in the flux calculation.
+            Default is 4.
         use_tqdm : bool, optional
             Show a progress bar if *tqdm* is available.  Default is True.
         verbose : bool, optional
@@ -320,7 +324,7 @@ class Injection(metaclass=Singleton):
                         flux += camera.get_outputs(flux_mode='mean')
                     flux /= float(avg_frames)
 
-                    injection_maps[ch_idx, i, j] = float(np.sum(flux))
+                    injection_maps[ch_idx, i, j] = float(np.sum(flux[:nb_outputs]))
 
             # Park this channel while scanning the next one
             self.off(ch_idx)
@@ -1085,295 +1089,6 @@ class Injection(metaclass=Singleton):
                 'max_inj':max_data,
                 'bal_data':balanced_data}
 
-    def calibrate_old(
-        self,
-        grid_n: int = 31,
-        ttamp: float = 3.0,
-        piston_nm: Optional[float] = None,
-        avg_frames: int = 1,
-        use_tqdm: bool = True,
-        plot: bool = True,
-        tilt_tol: float = 1e-3,
-        verbose: bool = False,
-    ) -> dict:
-        """Calibrate injection tip/tilt for all channels.
-
-        **Algorithm**
-
-        1. *Scan* – For each channel (other channels parked), perform a 2-D
-           tip × tilt raster scan and record the total output flux.
-        2. *Find max* – The optimal (tip, tilt) is the grid pixel with the
-           highest flux (no fitting, no centroid).
-        3. *Find balanced* – Identify the channel whose maximum flux is the
-           lowest (the "weakest" channel).  For each of the remaining channels,
-           keep tip fixed at its max-flux value and perform a **dichotomy
-           search on tilt** (perpendicular to the channel plane, avoiding
-           cross-talk) to find the tilt that equalises the flux to the weakest
-           channel's maximum.  The search picks one side of the peak
-           arbitrarily (positive tilt direction).
-        4. *Return metadata* – A dictionary with max and balanced tip/tilt
-           positions and the corresponding flux values.
-
-        Parameters
-        ----------
-        grid_n : int, optional
-            Number of points per axis for the initial scan.  Default is 31.
-        ttamp : float, optional
-            Half-range of the tip/tilt scan in mrad.  Default is 3.0.
-        piston_nm : float or None, optional
-            Piston applied during calibration.  If ``None``, the midpoint of
-            ``dm.piston_range`` is used.
-        avg_frames : int, optional
-            Frames averaged per measurement.  Default is 1.
-        use_tqdm : bool, optional
-            Show progress bar.  Default is True.
-        plot : bool, optional
-            Show diagnostic plots.  Default is True.
-        tilt_tol : float, optional
-            Tolerance on tilt (mrad) for the dichotomy convergence.
-            Default is 1e-3.
-        verbose : bool, optional
-            Print debugging information.  Default is False.
-
-        Returns
-        -------
-        dict
-            Dictionary with the following keys:
-
-            ``'max'``
-                ``list[list[float]]`` – Per channel, ``[tip_mrad, tilt_mrad]``
-                that maximises flux.
-            ``'balanced'``
-                ``list[list[float]]`` – Same structure, positions that
-                equalise all channels to the weakest channel's peak flux.
-            ``'flux_max'``
-                ``list[float]`` – Peak flux per channel at max position.
-            ``'flux_balanced'``
-                ``list[float]`` – Flux per channel at balanced position.
-            ``'injection_maps'``
-                ``ndarray`` – The raw scan maps (N_ch, grid_n, grid_n).
-            ``'tt_ramp'``
-                ``ndarray`` – The tip/tilt ramp used for the scan.
-        """
-
-        segs = self._injection_segments
-        n_ch = len(segs)
-        camera = Cred3()
-        settle = float(Config().get('dm.stabilization_time', 0.01))
-
-        if piston_nm is None:
-            piston_nm = float(np.mean(Config().get('dm.piston_range')))
-
-        # ── Step 1: Scan tip/tilt space ──────────────────────────────────────
-        print("── Step 1/3: Scanning tip/tilt space ──")
-        injection_maps, tt_ramp = self.get_injection_maps(
-            grid_n=grid_n,
-            ttamp=ttamp,
-            avg_frames=avg_frames,
-            use_tqdm=use_tqdm,
-            verbose=verbose,
-        )
-
-        # ── Step 2: Find max injection (brightest pixel) ─────────────────────
-        print("── Step 2/3: Finding maximum injection points ──")
-
-        max_tt: List[List[float]] = [None] * n_ch  # [tip, tilt] per channel
-        flux_max: List[float] = [0.0] * n_ch
-        tip_max_arr = np.empty(n_ch)
-        tilt_max_arr = np.empty(n_ch)
-
-        for ch_idx in range(n_ch):
-            seg = segs[ch_idx]
-            fmap = injection_maps[ch_idx]
-
-            # Brightest pixel
-            idx_flat = int(np.argmax(fmap))
-            i_max, j_max = np.unravel_index(idx_flat, fmap.shape)
-
-            best_tip = float(tt_ramp[i_max])
-            best_tilt = float(tt_ramp[j_max])
-            best_flux = float(fmap[i_max, j_max])
-
-            tip_max_arr[ch_idx] = best_tip
-            tilt_max_arr[ch_idx] = best_tilt
-            max_tt[ch_idx] = [best_tip, best_tilt]
-            flux_max[ch_idx] = best_flux
-
-            if verbose:
-                print(
-                    f"  Channel {ch_idx} (seg {seg}): max flux = {best_flux:.4g} "
-                    f"at (tip, tilt) = ({best_tip:.4f}, {best_tilt:.4f}) mrad"
-                )
-
-        # ── Step 3: Balanced injection via dichotomy on tilt ─────────────────
-        print("── Step 3/3: Balancing injection fluxes ──")
-
-        # Identify weakest channel
-        weak_ch = int(np.argmin(flux_max))
-        weak_seg = segs[weak_ch]
-        target_flux = flux_max[weak_ch]
-
-        if verbose:
-            print(
-                f"  Weakest channel: {weak_ch} (seg {weak_seg}), "
-                f"target flux = {target_flux:.4g}"
-            )
-
-        balanced_tt: List[List[float]] = [None] * n_ch  # [tip, tilt] per channel
-        flux_balanced: List[float] = [0.0] * n_ch
-
-        # Record dichotomy evaluation history for diagnostic plotting. Each
-        # element is a dict with lists 'tilts' and 'fluxes' storing the
-        # evaluated tilts and corresponding fluxes during the bisection.
-        dichotomy_history: List[dict] = [dict(tilts=[], fluxes=[]) for _ in range(n_ch)]
-
-        # The weakest channel stays at its max position
-        balanced_tt[weak_ch] = list(max_tt[weak_ch])
-        flux_balanced[weak_ch] = target_flux
-
-        for ch_idx in range(n_ch):
-            seg = segs[ch_idx]
-            if ch_idx == weak_ch:
-                continue
-
-            if verbose:
-                print(f"  Dichotomy on channel {ch_idx} (seg {seg})…")
-
-            # Park all other channels
-            others = [c for c in range(n_ch) if c != ch_idx]
-            self.off(others)
-
-            # Fix tip at max-flux value
-            fixed_tip = float(tip_max_arr[ch_idx])
-            best_tilt = float(tilt_max_arr[ch_idx])
-
-            # Determine the search direction: we move tilt away from the peak
-            # towards positive tilt (arbitrary side choice).  If moving in the
-            # positive direction does not decrease flux, we try the negative
-            # direction instead.
-            tilt_bound_pos = float(ttamp)
-            tilt_bound_neg = -float(ttamp)
-
-            # Measure flux at peak position first.
-            self.dm.segments[seg].set_ptt(piston_nm, fixed_tip, best_tilt)
-            time.sleep(settle)
-            peak_flux = self._measure_flux(camera, avg_frames)
-
-            # store initial point (peak)
-            dichotomy_history[ch_idx]['tilts'].append(best_tilt)
-            dichotomy_history[ch_idx]['fluxes'].append(peak_flux)
-
-            # Try a small step in the positive tilt direction
-            test_tilt = min(best_tilt + 0.5, tilt_bound_pos)
-            self.dm.segments[seg].set_ptt(piston_nm, fixed_tip, test_tilt)
-            time.sleep(settle)
-            test_flux = self._measure_flux(camera, avg_frames)
-
-            # store the test point
-            dichotomy_history[ch_idx]['tilts'].append(test_tilt)
-            dichotomy_history[ch_idx]['fluxes'].append(test_flux)
-
-            if test_flux < peak_flux:
-                # Positive direction reduces flux → search [best_tilt, +ttamp]
-                # In this interval flux decreases monotonically from peak.
-                # lo = peak side (high flux), hi = far side (low flux).
-                search_sign = +1.0
-                lo_tilt = best_tilt
-                hi_tilt = tilt_bound_pos
-            else:
-                # Negative direction reduces flux → search [-ttamp, best_tilt]
-                search_sign = -1.0
-                lo_tilt = tilt_bound_neg
-                hi_tilt = best_tilt
-
-            # Dichotomy: we maintain the invariant
-            #   flux(lo_tilt) >= target_flux >= flux(hi_tilt)
-            # when search_sign > 0  (lo near peak, hi far away)
-            # and the symmetric when search_sign < 0.
-            n_iter = 0
-            max_iter = 50  # safety limit
-            while abs(hi_tilt - lo_tilt) > tilt_tol and n_iter < max_iter:
-                mid_tilt = (lo_tilt + hi_tilt) / 2.0
-                self.dm.segments[seg].set_ptt(piston_nm, fixed_tip, mid_tilt)
-                time.sleep(settle)
-                mid_flux = self._measure_flux(camera, avg_frames)
-
-                # record mid-point evaluation for diagnostics
-                dichotomy_history[ch_idx]['tilts'].append(mid_tilt)
-                dichotomy_history[ch_idx]['fluxes'].append(mid_flux)
-
-                if search_sign > 0:
-                    # lo is near peak (high flux), hi is far (low flux)
-                    if mid_flux > target_flux:
-                        lo_tilt = mid_tilt  # move away from peak
-                    else:
-                        hi_tilt = mid_tilt  # move closer to peak
-                else:
-                    # lo is far (low flux), hi is near peak (high flux)
-                    if mid_flux > target_flux:
-                        hi_tilt = mid_tilt  # move away from peak
-                    else:
-                        lo_tilt = mid_tilt  # move closer to peak
-
-                n_iter += 1
-
-            # Final measurement at converged point
-            bal_tilt = (lo_tilt + hi_tilt) / 2.0
-            self.dm.segments[seg].set_ptt(piston_nm, fixed_tip, bal_tilt)
-            time.sleep(settle)
-            bal_flux = self._measure_flux(camera, avg_frames)
-
-            # store final converged point
-            dichotomy_history[ch_idx]['tilts'].append(bal_tilt)
-            dichotomy_history[ch_idx]['fluxes'].append(bal_flux)
-
-            balanced_tt[ch_idx] = [fixed_tip, bal_tilt]
-            flux_balanced[ch_idx] = bal_flux
-
-            if verbose:
-                print(
-                    f"    → balanced tilt = {bal_tilt:.4f} mrad, "
-                    f"flux = {bal_flux:.4g} (target {target_flux:.4g}), "
-                    f"iterations = {n_iter}"
-                )
-
-        # Park everything and restore flat
-        self.flat()
-
-        # ── Persist to config ────────────────────────────────────────────────
-        Config().set('injection.max', np.array(max_tt).tolist(), autosave=False)
-        Config().set('injection.balanced', np.array(balanced_tt).tolist(), autosave=False)
-        Config().save_to_file()
-
-        print("✅ Injection calibration saved to config "
-              "(injection.max / injection.balanced)")
-
-        # ── Plot ─────────────────────────────────────────────────────────────
-        fig = None
-        fig_dict = None
-        if plot:
-            fig_dict = self._plot_calibration(
-                injection_maps, tt_ramp, segs,
-                max_tt, balanced_tt, flux_max, flux_balanced,
-                dichotomy_history=dichotomy_history,
-            )
-            # Backwards-compatible primary figure (maps)
-            if isinstance(fig_dict, dict):
-                fig = fig_dict.get('maps')
-            else:
-                fig = fig_dict
-
-        return {
-            'max': max_tt,
-            'balanced': balanced_tt,
-            'flux_max': flux_max,
-            'flux_balanced': np.array(flux_balanced),
-            'injection_maps': injection_maps,
-            'tt_ramp': tt_ramp,
-            'figure': fig,
-            'figures': fig_dict,
-        }
-
     def save_telemetry(self, filename, images_info, tables_info):
         """
             Saves multiple images and multiple tables to a single FITS file.
@@ -1448,7 +1163,10 @@ class Injection(metaclass=Singleton):
     # -- private helpers ------------------------------------------------------
 
     @staticmethod
-    def _measure_flux(camera: 'Cred3', avg_frames: int = 1, flux_mode: str = 'mean') -> float:
+    def _measure_flux(camera: 'Cred3', 
+                      avg_frames: int = 1, 
+                      flux_mode: str = 'mean',
+                      nb_outputs: int = 4) -> float:
         """Measure total output flux (sum of all camera outputs).
 
         Parameters
@@ -1457,6 +1175,8 @@ class Injection(metaclass=Singleton):
             Camera instance.
         avg_frames : int
             Number of frames to average.
+        nb_outputs : int
+            Number of outputs to include in the flux calculation.
 
         Returns
         -------
@@ -1467,7 +1187,7 @@ class Injection(metaclass=Singleton):
         for _ in range(avg_frames):
             flux += camera.get_outputs(flux_mode=flux_mode)
         flux /= float(avg_frames)
-        return float(np.sum(flux))
+        return float(np.sum(flux[:nb_outputs]))
 
     @staticmethod
     def _plot_calibration(
