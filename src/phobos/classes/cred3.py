@@ -103,12 +103,11 @@ class Cred3(metaclass=Singleton):
         >>> img_no_dark = camera.get_image(subtract_dark=False)
         """
         
-        imgs = []
+        img = np.zeros_like(self.cam.get_latest_data(self.semid))
         for _ in range(stack):
-            img = self.cam.get_latest_data(self.semid)
-            imgs.append(img)
-        img = np.mean(imgs, axis=0)
-        
+            img += self.cam.get_latest_data(self.semid)
+        img = img / stack
+
         # Determine whether to subtract dark
         if subtract_dark is None:
             subtract_dark = self.use_dark
