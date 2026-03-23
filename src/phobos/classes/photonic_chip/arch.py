@@ -395,7 +395,7 @@ class _Arch:
         """
         Calibrate phase-to-power conversion coefficients for all shifters in this chip.
         
-        This method scans each shifter individually from 0 to 1.2W, measures the output flux
+        This method scans each shifter individually from 0 to 1W, measures the output flux
         using Cred3 camera, fits a sinusoid to the response, and
         updates the PHASE_CONVERSION coefficient based on the measured period.
         

@@ -324,7 +324,7 @@ class Injection(metaclass=Singleton):
                         flux += camera.get_outputs(flux_mode='mean')
                     flux /= float(avg_frames)
 
-                    injection_maps[ch_idx, i, j] = float(np.sum(flux[:nb_outputs]))
+                    injection_maps[ch_idx, i, j] = float(np.sum(flux))
 
             # Park this channel while scanning the next one
             self.off(ch_idx)
@@ -1187,7 +1187,7 @@ class Injection(metaclass=Singleton):
         for _ in range(avg_frames):
             flux += camera.get_outputs(flux_mode=flux_mode)
         flux /= float(avg_frames)
-        return float(np.sum(flux[:nb_outputs]))
+        return float(np.sum(flux))
 
     @staticmethod
     def _plot_calibration(
