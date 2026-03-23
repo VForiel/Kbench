@@ -254,7 +254,7 @@ class Injection(metaclass=Singleton):
         grid_n: int = 31,
         ttamp: float = 3.0,
         avg_frames: int = 1,
-        nb_outputs: int = 4,
+        n_roi: int = 4,
         use_tqdm: bool = True,
         verbose: bool = False,
     ) -> Tuple[np.ndarray, np.ndarray]:
@@ -273,8 +273,8 @@ class Injection(metaclass=Singleton):
             Default is 3.0.
         avg_frames : int, optional
             Number of camera frames to average per point.  Default is 1.
-        nb_outputs : int, optional
-            Number of outputs of the chip to include in the flux calculation.
+        n_roi : int, optional
+            Number of ROI on a frame to include in the flux calculation.
             Default is 4.
         use_tqdm : bool, optional
             Show a progress bar if *tqdm* is available.  Default is True.
@@ -319,9 +319,9 @@ class Injection(metaclass=Singleton):
                 for j, tilt in enumerate(tt_ramp):
                     self.dm.segments[seg].set_ptt(DM().mid_piston, float(tip), float(tilt))
 
-                    flux = np.zeros_like(camera.get_outputs(flux_mode='mean'))
+                    flux = np.zeros_like(self._measure_flux(camera, n_roi, avg_frames, flux_mode='mean'))
                     for _ in range(avg_frames):
-                        flux += camera.get_outputs(flux_mode='mean')
+                        flux += self._measure_flux(camera, n_roi, avg_frames, flux_mode='mean')
                     flux /= float(avg_frames)
 
                     injection_maps[ch_idx, i, j] = float(np.sum(flux))
@@ -681,6 +681,7 @@ class Injection(metaclass=Singleton):
         tt_ramp,
         tilt_bound: float,
         avg_frames: int,
+        n_roi: int,
         tilt_tol: float = 1e-3,
         plot: bool = True,
         verbose: bool = False
@@ -715,6 +716,8 @@ class Injection(metaclass=Singleton):
             clamped to [-tilt_bound, +tilt_bound].
         avg_frames : int
             Number of camera frames to average for each flux measurement.
+        n_roi : int
+            Number of ROI to read from the frame.
         tilt_tol : float, optional
             Convergence tolerance on tilt (mrad) for the dichotomy. Default: 1e-3.
         plot : bool, optional
@@ -850,7 +853,7 @@ class Injection(metaclass=Singleton):
             # Measure flux at peak position first.
             self.dm.segments[seg].set_ptt(piston_nm, fixed_tip, best_tilt)
             time.sleep(settle)
-            peak_flux = self._measure_flux(camera, avg_frames)
+            peak_flux = self._measure_flux(camera, n_roi, avg_frames)
 
             # store initial point (peak)
             dichotomy_history[ch_idx]['tilts'].append(best_tilt)
@@ -860,7 +863,7 @@ class Injection(metaclass=Singleton):
             test_tilt = min(best_tilt + 0.5, tilt_bound_pos)
             self.dm.segments[seg].set_ptt(piston_nm, fixed_tip, test_tilt)
             time.sleep(settle)
-            test_flux = self._measure_flux(camera, avg_frames)
+            test_flux = self._measure_flux(camera, n_roi, avg_frames)
 
             # store the test point
             dichotomy_history[ch_idx]['tilts'].append(test_tilt)
@@ -889,7 +892,7 @@ class Injection(metaclass=Singleton):
                 mid_tilt = (lo_tilt + hi_tilt) / 2.0
                 self.dm.segments[seg].set_ptt(piston_nm, fixed_tip, mid_tilt)
                 time.sleep(settle)
-                mid_flux = self._measure_flux(camera, avg_frames)
+                mid_flux = self._measure_flux(camera, n_roi, avg_frames)
 
                 # record mid-point evaluation for diagnostics
                 dichotomy_history[ch_idx]['tilts'].append(mid_tilt)
@@ -914,7 +917,7 @@ class Injection(metaclass=Singleton):
             bal_tilt = (lo_tilt + hi_tilt) / 2.0
             self.dm.segments[seg].set_ptt(piston_nm, fixed_tip, bal_tilt)
             time.sleep(settle)
-            bal_flux = self._measure_flux(camera, avg_frames)
+            bal_flux = self._measure_flux(camera, n_roi, avg_frames)
 
             # store final converged point
             dichotomy_history[ch_idx]['tilts'].append(bal_tilt)
@@ -969,6 +972,8 @@ class Injection(metaclass=Singleton):
         grid_n: int = 31,
         ttamp: float = 3.0,
         avg_frames: int = 1,
+        avg_frames_bal: int = 5,
+        n_roi: int = 4,
         nb_std: float = 1.0,
         tilt_bound: float = 3.0,
         tilt_tol: float = 1e-3,
@@ -1004,6 +1009,8 @@ class Injection(metaclass=Singleton):
             Default is 3.0 mrad.
         avg_frames : int, optional
             Number of camera frames to average per measurement point. Default is 1.
+        n_roi : int, optional
+            Number of ROI to read from the frame. Default is 4.
         nb_std : float, optional
             Number of standard deviations used to crop the region for the
             second (refined) Gaussian fit. Default is 1.0.
@@ -1063,10 +1070,10 @@ class Injection(metaclass=Singleton):
         >>> maps = result['injection_maps']
         >>> balanced_positions = result['bal_data']['balanced']
         """
-        injection_maps, tt_ramp = self.get_injection_maps(grid_n, ttamp, avg_frames, use_tqdm, verbose)
+        injection_maps, tt_ramp = self.get_injection_maps(grid_n, ttamp, avg_frames, n_roi, use_tqdm, verbose)
         max_data = self.find_max_injection(injection_maps, tt_ramp, nb_std, plot, verbose)
         balanced_data = self.find_balanced_injection(injection_maps, tt_ramp,
-                                                     tilt_bound, avg_frames,
+                                                     tilt_bound, avg_frames_bal, n_roi,
                                                      tilt_tol, plot, verbose)
 
         if save_path is not None:
@@ -1163,29 +1170,31 @@ class Injection(metaclass=Singleton):
     # -- private helpers ------------------------------------------------------
 
     @staticmethod
-    def _measure_flux(camera: 'Cred3', 
+    def _measure_flux(camera: 'Cred3',
+                      n_roi: int,
                       avg_frames: int = 1, 
-                      flux_mode: str = 'mean',
-                      nb_outputs: int = 4) -> float:
+                      flux_mode: str = 'mean') -> float:
         """Measure total output flux (sum of all camera outputs).
 
         Parameters
         ----------
         camera : Cred3
             Camera instance.
+        n_roi : int
+            Number of ROI to read from the frame.
         avg_frames : int
             Number of frames to average.
-        nb_outputs : int
-            Number of outputs to include in the flux calculation.
+        flux_mode : str
+            Mode for flux calculation (e.g., 'mean', 'sum').
 
         Returns
         -------
         float
             Total output flux.
         """
-        flux = np.zeros_like(camera.get_outputs(flux_mode=flux_mode))
+        flux = np.zeros_like(camera.get_outputs(flux_mode=flux_mode)[:n_roi])
         for _ in range(avg_frames):
-            flux += camera.get_outputs(flux_mode=flux_mode)
+            flux += camera.get_outputs(flux_mode=flux_mode)[:n_roi]
         flux /= float(avg_frames)
         return float(np.sum(flux))
 
