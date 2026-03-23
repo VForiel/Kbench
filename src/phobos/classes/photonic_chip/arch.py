@@ -6,6 +6,8 @@ import warnings
 from datetime import datetime
 import os
 from itertools import combinations
+from scipy.optimize import curve_fit, minimize
+import matplotlib.pyplot as plt
 
 from ...utils.singleton import Singleton
 from .phase_shifter import PhaseShifter
@@ -643,6 +645,320 @@ class _Arch:
             return np.array(out_fluxes)
         else:
             return np.array(out_fluxes), {
+                'figure1' : fig if plot else None,
+                'figure2' : fig2 if plot else None,
+            }
+
+    def phase_calibration2(self, 
+                           samples: int = 100, 
+                           niter: int = 3,
+                           avg_frames: int = 1,
+                           plot: bool = False, 
+                           verbose: bool = False, 
+                           return_metadata: bool = False):
+        """
+        Calibrate phase-to-power conversion coefficients for all shifters in this chip.
+        
+        This method scans each shifter individually from 0 to 1W, measures the output flux
+        using Cred3 camera, several times.
+        For each shifter, it fits a sinusoid to the average response, and
+        updates the PHASE_CONVERSION coefficient based on the measured period.
+        
+        Parameters
+        ----------
+        samples : int
+            Number of power steps for the scan. Default is 100.
+        niter : int
+            Number of iterations for the scan of one shifter. Default is 3.
+        avg_frames : int
+            Number of frames to average for each measurement. Default is 1.
+        plot : bool, optional
+            If True, plot the fitted curves. Default is False.
+        verbose : bool, optional
+            If True, print calibration details. Default is False.
+        
+        Returns
+        -------
+        np.ndarray
+            Array of calibrated phase-to-power conversion coefficients of colums (shifter ID, power period (W), coeff (W/rad))
+            Array of measured output fluxes for each shifter during the scan.
+        dict, optional
+            If return_metadata is True, also returns a dict with metadata including the following keys:
+            - "figure1": The calibration plot figure (if plot=True)
+            - "figure2": The phase scan verification plot figure (if plot=True)
+        """
+
+        power_range = np.linspace(0, 1, samples) # Power from 0 to 1W
+    
+        def sine(x, A, T, phi):
+            return A * np.sin(2*np.pi/T * x + phi)
+
+        def ramp(x, slope, offset):
+            return slope * x + offset
+
+        def sine_ramp(x, A, T, phi, slope, offset):
+            return sine(x, A, T, phi) + ramp(x, slope, offset)
+
+        if verbose:
+            print(f"🔧 Calibrating phase for {len(self.shifters)} shifters...")
+        
+        if plot:
+            n_shifters = len(self.shifters)
+            cols = int(np.ceil(np.sqrt(n_shifters)))
+            rows = int(np.ceil(n_shifters / cols))
+            fig, axs = plt.subplots(rows, cols, figsize=(4*cols, 3*rows), constrained_layout=True)
+            fig.suptitle(f"Phase Calibration - {self.name}")
+            if n_shifters > 1:
+                axs = np.atleast_1d(axs).flatten()
+            else:
+                axs = [axs]            
+
+        shifter_diag_fluxes = []
+        # Iterate over the shifters
+        calib_coeffs = []
+        for idx, shifter in enumerate(self.shifters):
+
+            # 1. Scan each shifter multiple times
+            # For each shifter, we do the scan several times. Each iteration is corrected for the drift.
+            no_drift_flux = []
+            for iter in range(niter):
+                # Turn off all shifters first
+                self.turn_off(verbose=False)
+
+                if verbose:
+                    print(f"  - Scanning shifter {shifter.channel} {iter+1}/{niter}")
+                
+                
+                # Scan power
+                fluxes = []
+                for p in power_range:
+                    shifter.set_power(p)
+                    
+                    # Get outputs
+                    outs = Cred3().get_outputs(stack=avg_frames)
+                    fluxes.append(outs[:self.n_outputs])
+                
+                shifter.set_power(0)
+                fluxes = np.array(fluxes) # Shape (n_samples, n_outputs)
+
+                # Calculate amplitudes to filter out unaffected outputs
+                amplitudes = np.ptp(fluxes, axis=0)
+                max_amp = np.max(amplitudes) if len(amplitudes) > 0 else 0
+                threshold = max_amp / 10.0
+
+                # Correct ramp drift on each output
+                if verbose:
+                    print('Correcting drift...')
+
+                no_drift_outputs = []
+                for i in range(self.n_outputs):
+                    if amplitudes[i] < threshold:
+                        # Skip outputs that are not affected by this shifter
+                        mock = np.nan * np.zeros_like(fluxes[:, i])
+                        no_drift_outputs.append(mock)
+                        continue
+
+                    y_data = fluxes[:, i]
+                    p0 = [(np.max(y_data)-np.min(y_data))/2, 0.6, 0, 0, np.mean(y_data)]
+
+                    bounds_min = [0,      0.5,-np.pi,-np.inf,-np.inf]
+                    bounds_max = [np.inf, 2.  , np.pi, np.inf, np.inf]
+
+                    method = 'minimize'
+
+                    try:
+                        if method == 'curve_fit':
+                            popt, _ = curve_fit(sine_ramp, power_range, y_data, p0=p0, bounds=(bounds_min, bounds_max), maxfev = 50000)
+                        else:
+                            def residual(params):
+                                return np.sum((y_data - sine_ramp(power_range, *params))**2)
+                            result = minimize(residual, p0, bounds=np.array((bounds_min, bounds_max)).T, options={'maxiter':10000})
+                            popt = result.x
+                    except RuntimeError as e:
+                        plt.figure()
+                        plt.plot(power_range, y_data, 'o', label='Data')
+                        plt.title(f"Fit failed for output {i}")
+                        plt.xlabel("Power (W)")
+                        plt.ylabel("Flux")
+                        plt.grid()
+                        plt.legend()
+                        plt.show()
+                        raise e                            
+
+                    A, T, phi, slope, offset = popt
+
+                    no_drift_data = y_data - slope * power_range - offset
+
+                    no_drift_outputs.append(no_drift_data)
+
+                no_drift_outputs = np.array(no_drift_outputs)
+                no_drift_outputs = no_drift_outputs.T # Shape (n_samples, n_outputs)
+                no_drift_flux.append(no_drift_outputs)
+
+            no_drift_flux = np.array(no_drift_flux) # shape (n_iter, n_samples, n_outputs)
+            shifter_diag_fluxes.append(no_drift_flux)
+
+            # 2. Average over the iterations
+            no_drift_flux_avg = np.nanmean(no_drift_flux, axis=0) # shape (n_samples, n_outputs)
+            no_drift_flux_std = np.nanstd(no_drift_flux, axis=0) # shape (n_samples, n_outputs)
+
+            # 3. Fit a model to the averaged data
+            if verbose:
+                print('Phase-to-power calibration...')
+
+            periods = [] # For each output
+            params = []
+            for i in range(no_drift_flux_avg.shape[1]):
+                y_data = no_drift_flux_avg[:, i]
+                y_std = no_drift_flux_std[:, i] / niter**0.5
+                p0 = [(np.max(y_data)-np.min(y_data))/2, 0.59, 0]
+
+                bounds_min = [0,      0.5, -np.pi]
+                bounds_max = [np.inf, 2.  , np.pi]
+
+                try:
+                    if method == 'curve_fit':
+                        popt, _ = curve_fit(sine, power_range, y_data, p0=p0, 
+                                            bounds=(bounds_min, bounds_max), maxfev = 50000,
+                                            sigmas=y_std)
+                    else:
+                        def residual(params, sigmas=1):
+                            return np.sum((y_data - sine(power_range, *params))**2 / sigmas**2)
+
+                        f = lambda x: residual(x, sigmas=y_std)
+                        result = minimize(f, p0, bounds=np.array((bounds_min, bounds_max)).T, options={'maxiter':10000})
+                        popt = result.x
+                except RuntimeError as e:
+                    plt.figure()
+                    plt.errorbar(power_range, y_data, yerr=y_std, fmt='o')
+                    plt.title(f"Fit failed for output {i} (no drift, avg)")
+                    plt.xlabel("Power (W)")
+                    plt.ylabel("Flux")
+                    plt.grid()
+                    plt.legend()
+                    plt.show()
+                    raise e
+
+                A, T, phi = popt
+                periods.append(T)
+                params.append(popt)
+
+            avg_period = np.mean(periods)
+            # Update coefficient
+            # Period T corresponds to 2pi phase shift
+            # So Power = Phase * Coeff => T = 2pi * Coeff => Coeff = T / 2pi
+            new_coeff = avg_period / (2 * np.pi)
+
+            shifter.phase_factor = new_coeff
+
+            if verbose:
+                print(f"  ✅ Shifter {shifter.channel} calibrated: Period={avg_period:.4f} W -> Coeff={new_coeff:.4f} W/rad")
+
+            calib_coeffs.append([shifter.channel, avg_period, new_coeff])
+
+            # Turn off channel before next shifter
+            shifter.turn_off()
+
+            # 4. Plot
+            if plot:
+                ax = axs[idx]
+                ax.set_title(f"Shifter {shifter.channel} (Average, drift and offset corrected)")
+                ax.set_xlabel("Power (W)")
+                ax.set_ylabel("Flux")
+                ax.grid(True)
+
+                # Plot data points and fit
+                for i in range(no_drift_flux_avg.shape[1]):
+                    line, = ax.plot(power_range, sine(power_range, *params[i]), '-', label=f'Out {i} (T={periods[i]:.3f}W)')
+                    ax.plot(power_range, no_drift_flux_avg[:, i], 'o', color=line.get_color(), alpha=0.3) 
+
+
+                # Hide unused subplots
+                for j in range(len(self.shifters), len(axs)):
+                    axs[j].axis('off')
+
+        calib_coeffs = np.array(calib_coeffs)
+
+        if plot:
+            plt.show()
+
+        # ========== SECOND FIGURE: PHASE SCAN (0 to 2π) ==========
+        if plot:
+            if verbose:
+                print("📊 Performing phase scan (0 to 2π) for verification...")
+
+            phase_range = np.linspace(-2*np.pi, 2*np.pi, samples)
+
+            fig2, axs2 = plt.subplots(rows, cols, figsize=(4*cols, 3*rows), constrained_layout=True)
+            fig2.suptitle(f"Phase Scan Verification (0 to 2π) - {self.name}")
+            if n_shifters > 1:
+                axs2 = np.atleast_1d(axs2).flatten()
+            else:
+                axs2 = [axs2]
+
+            for idx, shifter in enumerate(self.shifters):
+                # Turn off all shifters first
+                self.turn_off(verbose=False)
+                
+                if verbose:
+                    print(f"  - Scanning phase for shifter {shifter.channel}...")
+                
+                fluxes_phase = []
+                
+                # Scan phase from 0 to 2π
+                for phase in phase_range:
+                    shifter.set_phase(phase)
+                    
+                    # Get outputs
+                    outs = Cred3().get_outputs()
+                    fluxes_phase.append(outs[:self.n_outputs])
+                
+                shifter.set_power(0)
+                fluxes_phase = np.array(fluxes_phase)  # Shape (n_samples, n_outputs)
+                
+                # Calculate amplitudes to filter out unaffected outputs
+                amplitudes_phase = np.ptp(fluxes_phase, axis=0)
+                max_amp_phase = np.max(amplitudes_phase) if len(amplitudes_phase) > 0 else 0
+                threshold_phase = max_amp_phase / 10.0
+                
+                # Plot phase scan
+                ax2 = axs2[idx]
+                ax2.set_title(f"Shifter {shifter.channel}")
+                ax2.set_xlabel("Phase (rad)")
+                ax2.set_ylabel("Flux")
+                ax2.grid(True)
+                
+                # Add vertical lines at 0, π, 2π for reference
+                ax2.axvline(0, color='gray', linestyle='--', alpha=0.3, linewidth=0.8)
+                ax2.axvline(np.pi, color='gray', linestyle='--', alpha=0.3, linewidth=0.8)
+                ax2.axvline(2*np.pi, color='gray', linestyle='--', alpha=0.3, linewidth=0.8)
+                
+                for i in range(fluxes_phase.shape[1]):
+                    if amplitudes_phase[i] < threshold_phase:
+                        # Skip outputs that are not affected by this shifter
+                        continue
+                    
+                    y_data_phase = fluxes_phase[:, i]
+                    ax2.plot(phase_range, y_data_phase, 'o-', label=f'Out {i}', alpha=0.7)
+                
+                ax2.legend(fontsize='small')
+                
+                # Turn off shifter before next
+                shifter.turn_off()
+            
+            # Hide unused subplots in second figure
+            for j in range(len(self.shifters), len(axs2)):
+                axs2[j].axis('off')
+            
+            plt.show()
+
+        if verbose:
+            print("✅ Phase calibration completed.")
+
+        if not return_metadata:
+            return calib_coeffs, np.array(shifter_diag_fluxes)
+        else:
+            return np.array(shifter_diag_fluxes), {
                 'figure1' : fig if plot else None,
                 'figure2' : fig2 if plot else None,
             }
