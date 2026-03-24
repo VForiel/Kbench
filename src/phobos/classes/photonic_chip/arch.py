@@ -721,6 +721,7 @@ class _Arch:
             # 1. Scan each shifter multiple times
             # For each shifter, we do the scan several times. Each iteration is corrected for the drift.
             no_drift_flux = []
+            scan_flux = []
             for iter in range(niter):
                 # Turn off all shifters first
                 self.turn_off(verbose=False)
@@ -794,9 +795,11 @@ class _Arch:
                 no_drift_outputs = np.array(no_drift_outputs)
                 no_drift_outputs = no_drift_outputs.T # Shape (n_samples, n_outputs)
                 no_drift_flux.append(no_drift_outputs)
+                scan_flux.append(fluxes)
 
             no_drift_flux = np.array(no_drift_flux) # shape (n_iter, n_samples, n_outputs)
-            shifter_diag_fluxes.append(no_drift_flux)
+            scan_flux = np.array(scan_flux) # shape (n_iter, n_samples, n_outputs)
+            shifter_diag_fluxes.append(scan_flux)
 
             # 2. Average over the iterations
             no_drift_flux_avg = np.nanmean(no_drift_flux, axis=0) # shape (n_samples, n_outputs)
