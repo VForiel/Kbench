@@ -127,13 +127,8 @@ class PhaseShifter:
         Notes
         -----
         The slope coefficient is calibrated automatically on first use using
-        a 2-point measurement (1V and 30V at 300mA). The relationship is:
-        
-            P = slope * V * I
-            
-        thus, we have:
-        
-            V = sqrt(P / slope)
+        a 2-point measurement (1V and 30V at 300mA). 
+        See PhaseShifter.power_dac_calibration() documentation for more details.
         
         Examples
         --------
@@ -151,7 +146,7 @@ class PhaseShifter:
         self.set_current(300.0, verbose=verbose)
         
         # Compute voltage from power using the calibrated slope
-        # P = slope * V * I  =>  V = sqrt(P / (slope * I))
+        # P = slope * V * I  =>  V = sqrt(P / (slope))
         # I = 0.3 A (300 mA converted to amperes)
         voltage = np.sqrt(power / self.power_dac_factor)
         
@@ -324,9 +319,14 @@ class PhaseShifter:
         """
         Calibrate power correction coefficient for this channel using 2-point measurement.
         
-        This method measures the power at 1V and 30V with a fixed current of 300mA,
-        then computes the slope coefficient from these two points. The relationship
-        used is P = slope * V * I, where I is in amperes.
+        The TOPA electric cricuit can be simplified as a simple R circuit.
+        The coefficient to measure is the invert of the resistance R and
+        the internal conversions of the driver between the requested voltage
+        and the actual output voltage.
+
+        All in all, the relationship between the requested power and the applied voltage is:
+            - P = $\alpha \cdot V²$
+            - $\alpha = coeff_{XPOW} / R$, as there is a linear relationship between the requested and the applied voltages.
         
         Parameters
         ----------
@@ -344,13 +344,14 @@ class PhaseShifter:
         -----
         The calibration process:
         1. Set current to 300 mA
-        2. Measure power at V = 1V
-        3. Measure power at V = 30V
-        4. Compute slope from: slope = (P2 - P1) / ((V2² - V1²) * I)
-        5. Store slope in POWER_CORRECTION[channel]
+        2. Measure intensity at V = 1V
+        3. Measure intensity at V = 30V
+        4. Compute $\alpha$ from: $\alpha$ = (I2 - I1) / (V2 - V1)
+        5. Store $\alpha$ in POWER_CORRECTION[channel]
         
-        The slope represents the proportionality constant in P = slope * V² * I.
+        Thus, requested power is converted into applied voltage with: $V_{applied} = \sqrt{P_{requested} / \alpha}$.
         
+       
         Examples
         --------
         >>> ch = PhaseShifter(17)

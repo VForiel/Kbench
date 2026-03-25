@@ -460,7 +460,7 @@ class Cred3(metaclass=Singleton):
         plt.figure(figsize=(10, 10))
         for i, crop in enumerate(crops):
             plt.subplot(nrows, ncols, i + 1)
-            plt.title(f'Beam {i + 1}')
+            plt.title(f'Channel {i}')
             plt.imshow(crop, origin='lower', cmap='jet', vmin=0, vmax=vmax)
             plt.colorbar()
         plt.tight_layout()
