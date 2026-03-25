@@ -318,6 +318,12 @@ class _Arch:
             Length must match number of TOPAs in architecture.
         verbose : bool, optional
             If True, print command details. Default is False.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape (n_shifters, 2) containing theoretical and applied powers 
+            for each shifter. Each row is [power_theoretical, power_applied] in watts (W).            
             
         Raises
         ------
@@ -332,10 +338,15 @@ class _Arch:
         phases = np.asarray(phases)
         if len(phases) != len(self.shifters):
             raise ValueError(f"❌ Expected {len(self.shifters)} phase values, got {len(phases)}")
-        
+
+        powers = []
         for shifter, phase in zip(self.shifters, phases):
-            shifter.set_phase(phase, verbose=verbose)
-    
+            p_th, p_appl = shifter.set_phase(phase, verbose=verbose)
+            powers.append([p_th, p_appl])
+
+        powers = np.array(powers)
+        return powers
+
     def get_phases(self, verbose: bool = False) -> np.ndarray:
         """
         Query estimated phase shifts for all TOPAs in this chip.

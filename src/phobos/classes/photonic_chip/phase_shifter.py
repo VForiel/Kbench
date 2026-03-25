@@ -169,6 +169,15 @@ class PhaseShifter:
             Target phase shift in radians.
         verbose : bool, optional
             If True, print command details. Default is False.
+
+        Returns
+        -------
+        tuple of (float, float)
+            A tuple containing:
+            - power : float
+                The computed optical power in watts (W) needed to achieve the target phase.
+            - read_power : float
+                The actual measured optical power applied to the channel in watts (W).
             
         Notes
         -----
@@ -192,9 +201,14 @@ class PhaseShifter:
 
         # Apply the power
         self.set_power(power, verbose=verbose)
+
+        # Read the applied power
+        read_power = self.get_power(verbose=verbose)
         
         if verbose:
             print(f"🔧 Channel {self.channel}: phase={phase:.3f} rad → power={power:.3f} W")
+
+        return power, read_power
 
     # Getter methods ----------------------------------------------------------
         
