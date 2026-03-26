@@ -763,6 +763,7 @@ class _Arch:
                     print('Correcting drift...')
 
                 no_drift_outputs = []
+                periods = [] # For each output
                 for i in range(self.n_outputs):
                     if amplitudes[i] < threshold:
                         # Skip outputs that are not affected by this shifter
@@ -776,16 +777,11 @@ class _Arch:
                     bounds_min = [0,      0.5,-np.pi,-np.inf,-np.inf]
                     bounds_max = [np.inf, 2.  , np.pi, np.inf, np.inf]
 
-                    method = 'minimize'
-
                     try:
-                        if method == 'curve_fit':
-                            popt, _ = curve_fit(sine_ramp, power_range, y_data, p0=p0, bounds=(bounds_min, bounds_max), maxfev = 50000)
-                        else:
-                            def residual(params):
-                                return np.sum((y_data - sine_ramp(power_range, *params))**2)
-                            result = minimize(residual, p0, bounds=np.array((bounds_min, bounds_max)).T, options={'maxiter':10000})
-                            popt = result.x
+                        def residual(params):
+                            return np.sum((y_data - sine_ramp(power_range, *params))**2)
+                        result = minimize(residual, p0, bounds=np.array((bounds_min, bounds_max)).T, options={'maxiter':10000})
+                        popt = result.x
                     except RuntimeError as e:
                         plt.figure()
                         plt.plot(power_range, y_data, 'o', label='Data')
@@ -798,6 +794,7 @@ class _Arch:
                         raise e                            
 
                     A, T, phi, slope, offset = popt
+                    periods.append(T)
 
                     no_drift_data = y_data - slope * power_range - offset
 
@@ -816,46 +813,42 @@ class _Arch:
             no_drift_flux_avg = np.nanmean(no_drift_flux, axis=0) # shape (n_samples, n_outputs)
             no_drift_flux_std = np.nanstd(no_drift_flux, axis=0) # shape (n_samples, n_outputs)
 
-            # 3. Fit a model to the averaged data
-            if verbose:
-                print('Phase-to-power calibration...')
+            if niter > 1: # Don't do it if only one iteration
+                # 3. Fit a model to the averaged data
+                if verbose:
+                    print('Phase-to-power calibration...')
 
-            periods = [] # For each output
-            params = []
-            for i in range(no_drift_flux_avg.shape[1]):
-                y_data = no_drift_flux_avg[:, i]
-                y_std = no_drift_flux_std[:, i] / niter**0.5
-                p0 = [(np.max(y_data)-np.min(y_data))/2, 0.59, 0]
+                periods = [] # For each output
+                params = []
+                for i in range(no_drift_flux_avg.shape[1]):
+                    y_data = no_drift_flux_avg[:, i]
+                    y_std = no_drift_flux_std[:, i] / niter**0.5
+                    p0 = [(np.max(y_data)-np.min(y_data))/2, 0.59, 0]
 
-                bounds_min = [0,      0.5, -np.pi]
-                bounds_max = [np.inf, 2.  , np.pi]
+                    bounds_min = [0,      0.5, -np.pi]
+                    bounds_max = [np.inf, 2.  , np.pi]
 
-                try:
-                    if method == 'curve_fit':
-                        popt, _ = curve_fit(sine, power_range, y_data, p0=p0, 
-                                            bounds=(bounds_min, bounds_max), maxfev = 50000,
-                                            sigmas=y_std)
-                    else:
+                    try:
                         def residual(params, sigmas=1):
-                            return np.sum((y_data - sine(power_range, *params))**2 / sigmas**2)
+                                return np.sum((y_data - sine(power_range, *params))**2 / sigmas**2)
 
                         f = lambda x: residual(x, sigmas=y_std)
                         result = minimize(f, p0, bounds=np.array((bounds_min, bounds_max)).T, options={'maxiter':10000})
                         popt = result.x
-                except RuntimeError as e:
-                    plt.figure()
-                    plt.errorbar(power_range, y_data, yerr=y_std, fmt='o')
-                    plt.title(f"Fit failed for output {i} (no drift, avg)")
-                    plt.xlabel("Power (W)")
-                    plt.ylabel("Flux")
-                    plt.grid()
-                    plt.legend()
-                    plt.show()
-                    raise e
+                    except RuntimeError as e:
+                        plt.figure()
+                        plt.errorbar(power_range, y_data, yerr=y_std, fmt='o')
+                        plt.title(f"Fit failed for output {i} (no drift, avg)")
+                        plt.xlabel("Power (W)")
+                        plt.ylabel("Flux")
+                        plt.grid()
+                        plt.legend()
+                        plt.show()
+                        raise e
 
-                A, T, phi = popt
-                periods.append(T)
-                params.append(popt)
+                    A, T, phi = popt
+                    periods.append(T)
+                    params.append(popt)
 
             avg_period = np.mean(periods)
             # Update coefficient
