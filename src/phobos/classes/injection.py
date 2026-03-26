@@ -593,7 +593,6 @@ class Injection(metaclass=Singleton):
             models.append(twoD_Gaussian((x, y), *popt).reshape(x.shape))
 
             if verbose:
-                print(f"Injection max of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[1]:.5f},{popt[2]:.5f}) mrad")
                 print(f"Injection spread of seg={injection_seg_indices[i]}: (tip, tilt) = ({popt[3]:.5f},{popt[4]:.5f}) mrad")
 
         params = np.array(params)

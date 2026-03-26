@@ -180,7 +180,8 @@ class Config:
                 self.set('cred3.output_centers', cam.output_centers.tolist())
             if cam.bulk_center is not None:
                 self.set('cred3.bulk_center', cam.bulk_center.tolist())
-                 
+            if cam.output_sizes is not None:
+                self.set('cred3.output_sizes', cam.output_sizes.tolist())
             print(f"   Shape: Cred3 -> use_dark={cam.use_dark}")
         except Exception as e:
              print(f"   ⚠️ Cred3 update skipped: {e}")
@@ -199,12 +200,12 @@ class Config:
         self._save_to_file()
         self.reload()
         
-    def apply(self):
+    def reset(self):
         """
-        Apply configuration state to all hardware components.
+        Reset configuration state to all hardware components.
         """
         import phobos
-        print("🚀 Applying configuration state to hardware...")
+        print("🚀 Resetting configuration state for hardware...")
         
         # 1. PupilMask
         try:
