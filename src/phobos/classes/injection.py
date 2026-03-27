@@ -1090,6 +1090,11 @@ class Injection(metaclass=Singleton):
 
             self.save_telemetry(filename, images_info, tables_info)
 
+            max_data['fig'][0].savefig(save_path / 'injection_map.png')
+
+            for key in balanced_data['figures'].keys():
+                balanced_data['figures'][key].savefig(save_path / f'injection_{key}.png')
+
         return {'injection_maps':injection_maps,
                 'tt_ramp':tt_ramp,
                 'max_inj':max_data,
