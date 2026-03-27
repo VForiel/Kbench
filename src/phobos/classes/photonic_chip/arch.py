@@ -732,7 +732,7 @@ class _Arch:
             # 1. Scan each shifter multiple times
             # For each shifter, we do the scan several times. Each iteration is corrected for the drift.
             no_drift_flux = []
-            scan_flux = []
+            scan_flux = [power_range]
             for iter in range(niter):
                 # Turn off all shifters first
                 self.turn_off(verbose=False)
