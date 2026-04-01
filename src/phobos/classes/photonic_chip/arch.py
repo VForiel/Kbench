@@ -732,7 +732,7 @@ class _Arch:
             # 1. Scan each shifter multiple times
             # For each shifter, we do the scan several times. Each iteration is corrected for the drift.
             no_drift_flux = []
-            scan_flux = [power_range]
+            scan_flux = []
             for iter in range(niter):
                 # Turn off all shifters first
                 self.turn_off(verbose=False)
@@ -752,6 +752,7 @@ class _Arch:
                 
                 shifter.set_power(0)
                 fluxes = np.array(fluxes) # Shape (n_samples, n_outputs)
+                print('FLUXES', fluxes.shape)
 
                 # Calculate amplitudes to filter out unaffected outputs
                 amplitudes = np.ptp(fluxes, axis=0)
@@ -777,7 +778,7 @@ class _Arch:
                     p0 = [(np.max(y_data)-np.min(y_data))/2, 0.6, 0, 0, np.mean(y_data)]
 
                     bounds_min = [0,      0.5,-np.pi,-(np.max(y_data)-np.min(y_data))/(power_range.max()-power_range.min()),-np.inf]
-                    bounds_max = [np.inf, 1.7  , np.pi, (np.max(y_data)-np.min(y_data))/(power_range.max()-power_range.min()), np.inf]
+                    bounds_max = [np.inf, 1.2  , np.pi, (np.max(y_data)-np.min(y_data))/(power_range.max()-power_range.min()), np.inf]
 
                     try:
                         def residual(params):
@@ -837,7 +838,7 @@ class _Arch:
                     p0 = [(np.max(y_data)-np.min(y_data))/2, 0.59, 0]
 
                     bounds_min = [0,      0.5, -np.pi]
-                    bounds_max = [np.inf, 1.7  , np.pi]
+                    bounds_max = [np.inf, 1.2  , np.pi]
 
                     try:
                         def residual(params, sigmas=1):
@@ -974,9 +975,9 @@ class _Arch:
             print("✅ Phase calibration completed.")
 
         if not return_metadata:
-            return calib_coeffs, np.array(shifter_diag_fluxes)
+            return calib_coeffs, np.array(shifter_diag_fluxes), power_range
         else:
-            return np.array(shifter_diag_fluxes), {
+            return calib_coeffs, np.array(shifter_diag_fluxes), power_range, {
                 'figure1' : fig if plot else None,
                 'figure2' : fig2 if plot else None,
             }
