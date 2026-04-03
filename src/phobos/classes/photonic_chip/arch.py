@@ -452,9 +452,10 @@ class _Arch:
             else:
                 axs = [axs]
 
-        out_fluxes = []
-        for idx, shifter in enumerate(self.shifters):
+        shifter_diag_fluxes = []
+        calib_coeffs = []
 
+        for idx, shifter in enumerate(self.shifters):
             # Turn off all shifters first
             self.turn_off(verbose=verbose)
 
@@ -471,7 +472,7 @@ class _Arch:
                 fluxes.append(outs)
             
             fluxes = np.array(fluxes) # Shape (n_samples, n_outputs)
-            out_fluxes.append(fluxes)
+            shifter_diag_fluxes.append(fluxes)
             
             # Calculate amplitudes to filter out unaffected outputs
             amplitudes = np.ptp(fluxes, axis=0)
@@ -504,19 +505,15 @@ class _Arch:
                 # D: 0
                 # E: mean
                 # F: 0
-                p0 = [(np.max(y_data)-np.min(y_data))/2, 11, 0, 0, np.mean(y_data), 0]
 
                 p0 = [(np.max(y_data)-np.min(y_data))/2, 0.6, 0, 0, np.mean(y_data)]
 
-                bounds_min = [0,      0,  0,      -np.inf, 0,     -np.inf]
-                bounds_max = [np.inf, 20, 2*np.pi, np.inf, np.inf, np.inf]
-
-                bounds_min = [0,      0.5,-np.pi,-np.inf,-np.inf]
-                bounds_max = [np.inf, 1  , np.pi, np.inf, np.inf]
+                bounds_min = [0,      0.5,-np.pi,-(np.max(y_data)-np.min(y_data))/(power_range.max()-power_range.min()),-np.inf]
+                bounds_max = [np.inf, 1.2  , np.pi, (np.max(y_data)-np.min(y_data))/(power_range.max()-power_range.min()), np.inf]
                 
                 try:
 
-                    method = 'curve_fit'
+                    method = 'minimize'
 
                     if method == 'minimize':
                         from scipy.optimize import minimize
@@ -526,12 +523,12 @@ class _Arch:
                             return np.sum((y_data - sine_func(power_range, *params))**2)
                         
                         # Use minimize with robust method
-                        result = minimize(residual, p0, bounds=np.array((bounds_min, bounds_max)).T, options={'maxiter':10000})
+                        result = minimize(residual, p0, bounds=np.array((bounds_min, bounds_max)).T, options={'maxiter':50000})
                         popt = result.x
 
                     elif method == 'curve_fit':
                         from scipy.optimize import curve_fit
-                        popt, _ = curve_fit(sine_func, power_range, y_data, p0=p0, bounds=(bounds_min, bounds_max), maxfev = 10000)
+                        popt, _ = curve_fit(sine_func, power_range, y_data, p0=p0, bounds=(bounds_min, bounds_max), maxfev = 50000)
                     
                     # A, B, C, D, E, F = popt
                     A, B, C, D, E = popt
@@ -539,10 +536,6 @@ class _Arch:
                     #period = 2 * np.pi / np.abs(B)
                     period = B
                     periods.append(period)
-
-                    if verbose:
-                        print("Coeffs:")
-                        print(popt)
                     
                     if plot:
                         # Plot data points and fit
@@ -569,12 +562,18 @@ class _Arch:
                 
                 if verbose:
                     print(f"  ✅ Shifter {shifter.channel} calibrated: Period={avg_period:.4f} W -> Coeff={new_coeff:.4f} W/rad")
+
+                new_coeff = avg_period / (2 * np.pi)
+                calib_coeffs.append([shifter.channel, avg_period, new_coeff])
             else:
                 if verbose:
                     print(f"  ❌ Shifter {shifter.channel} calibration failed: no valid fits.")
 
             # Turn off channel before next
             shifter.turn_off()
+
+        calib_coeffs = np.array(calib_coeffs)
+        shifter_diag_fluxes = np.array(shifter_diag_fluxes)
 
         if plot:
             # Hide unused subplots
@@ -612,7 +611,7 @@ class _Arch:
                     fluxes_phase.append(outs)
                 
                 fluxes_phase = np.array(fluxes_phase)  # Shape (n_samples, n_outputs)
-                
+
                 # Calculate amplitudes to filter out unaffected outputs
                 amplitudes_phase = np.ptp(fluxes_phase, axis=0)
                 max_amp_phase = np.max(amplitudes_phase) if len(amplitudes_phase) > 0 else 0
@@ -653,9 +652,9 @@ class _Arch:
             print("✅ Phase calibration completed.")
 
         if not return_metadata:
-            return np.array(out_fluxes)
+            return calib_coeffs, np.array(shifter_diag_fluxes), power_range
         else:
-            return np.array(out_fluxes), {
+            return calib_coeffs, np.array(shifter_diag_fluxes), power_range, {
                 'figure1' : fig if plot else None,
                 'figure2' : fig2 if plot else None,
             }
@@ -752,7 +751,6 @@ class _Arch:
                 
                 shifter.set_power(0)
                 fluxes = np.array(fluxes) # Shape (n_samples, n_outputs)
-                print('FLUXES', fluxes.shape)
 
                 # Calculate amplitudes to filter out unaffected outputs
                 amplitudes = np.ptp(fluxes, axis=0)
