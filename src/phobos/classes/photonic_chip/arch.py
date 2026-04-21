@@ -459,8 +459,8 @@ class _Arch:
             # Turn off all shifters first
             self.turn_off(verbose=verbose)
 
-            if verbose:
-                print(f"  - Scanning shifter {shifter.channel}...")
+            # if verbose:
+            print(f"  - Scanning shifter {shifter.channel}...")
             fluxes = []
             
             # Scan power
@@ -543,8 +543,8 @@ class _Arch:
                         ax.plot(power_range, y_data, 'o', color=line.get_color(), alpha=0.3)
                         
                 except Exception as e:
-                    if verbose:
-                        print(f"    ⚠️ Fit failed for output {i}: {e}")
+                    # if verbose:
+                    print(f"    ⚠️ Fit failed for output {i}: {e}")
             
             if plot:
                 ax.legend(fontsize='small')
@@ -560,14 +560,14 @@ class _Arch:
                 
                 shifter.phase_factor = new_coeff
                 
-                if verbose:
-                    print(f"  ✅ Shifter {shifter.channel} calibrated: Period={avg_period:.4f} W -> Coeff={new_coeff:.4f} W/rad")
+                # if verbose:
+                print(f"  ✅ Shifter {shifter.channel} calibrated: Period={avg_period:.4f} W -> Coeff={new_coeff:.4f} W/rad")
 
                 new_coeff = avg_period / (2 * np.pi)
                 calib_coeffs.append([shifter.channel, avg_period, new_coeff])
             else:
-                if verbose:
-                    print(f"  ❌ Shifter {shifter.channel} calibration failed: no valid fits.")
+                # if verbose:
+                print(f"  ❌ Shifter {shifter.channel} calibration failed: no valid fits.")
 
             # Turn off channel before next
             shifter.turn_off()
