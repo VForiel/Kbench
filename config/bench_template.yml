@@ -56,7 +56,7 @@ injection:
   - - -0.3999999999999999
     - 2.0
 filter_wheel:
-  port: /dev/ttyUSBthorlabs
+  port: /dev/ttyUSBFilterWheel
   selected_filter: 1
 photonic_chip:
   arch: 6
@@ -65,7 +65,7 @@ photonic_chip:
   stabilization_time: 0.01
 pupil_mask:
   newport_home: 56.15
-  newport_port: /dev/ttyUSBnewport
+  newport_port: /dev/ttyUSBMaskWheel
   selected_mask: 0
   zaber_h_pos: 150000
   zaber_port: /dev/ttyUSBzaber
