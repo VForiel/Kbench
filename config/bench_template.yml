@@ -70,3 +70,6 @@ pupil_mask:
   zaber_h_pos: 150000
   zaber_port: /dev/ttyUSBzaber
   zaber_v_pos: 150000
+flip_mount:
+  port: /dev/ttyUSBFlipMount
+  stabilization_time: 0.5

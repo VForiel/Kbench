@@ -23,6 +23,7 @@ except ImportError:
 if SANDBOX_MODE:
     from .sandbox import serial_mock as serial
     from .sandbox import xaosim_mock as xaosim
+    from .sandbox import flip_mount_mock as flip_mount
     shm = xaosim.shm
 else:
     import serial
