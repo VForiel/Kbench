@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "phob"
-version = "0.8.0"
+version = "0.9.0"
 description = "Python package for controlling optical test bench equipment in kernel-nulling interferometry"
 authors = [
     {name = "Vincent Foriel", email = "vincent.foriel@gmail.com"},
