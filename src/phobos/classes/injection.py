@@ -980,7 +980,7 @@ class Injection(metaclass=Singleton):
         plot: bool = False,
         verbose: bool = False,
         save_path = None,
-        check_focus = False
+        no_balance = False
     ):
 
         """Calibrate injection tip/tilt positions for all input channels.
@@ -1030,8 +1030,8 @@ class Injection(metaclass=Singleton):
             Print progress and debug information. Default is False.
         save_path: Path object, optional
             Path to directory where to save the diagnostic data
-        check_focus : bool, optional
-            If True, perform only a raster scan and find the maximum without the balancing stage. Default is False.
+        no_balance : bool, optional
+            If True, skip finding balanced positions. Default is False.
 
         Returns
         -------
@@ -1075,38 +1075,42 @@ class Injection(metaclass=Singleton):
         injection_maps, tt_ramp = self.get_injection_maps(grid_n, ttamp, avg_frames, n_roi, use_tqdm, verbose)
         max_data = self.find_max_injection(injection_maps, tt_ramp, nb_std, plot, verbose)
 
-        if not check_focus:
+        if not no_balance:
             balanced_data = self.find_balanced_injection(injection_maps, tt_ramp,
                                                         tilt_bound, avg_frames_bal, n_roi,
                                                         tilt_tol, plot, verbose)
-
-            if save_path is not None:
-                images_info = [{'data':injection_maps, 'extname':'TT map', 'segments':",".join(map(str, self._injection_segments))}]
-                tables_info = [{'extname':'TT axes', 'columns':[('tip', 'D', tt_ramp), ('tilt', 'D', tt_ramp)]},
-                            {'extname':'Centroids (mrad)', 'columns':[('segments', 'J', self._injection_segments),
-                                                                        ('tip', 'D', max_data['max_tt'][:,0]),
-                                                                        ('tilt', 'D', max_data['max_tt'][:,1])]},
-                            {'extname':'Width (mrad)', 'columns':[('segments', 'J', self._injection_segments),
-                                                                    ('tip', 'D', max_data['params'][:,3]),
-                                                                    ('tilt', 'D', max_data['params'][:,4])]}]
-
-                name = 'injection_telemetry_' + datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + '.fits'
-                filename = save_path / name
-
-                self.save_telemetry(filename, images_info, tables_info)
-
-                if plot:
-                    max_data['fig'][0].savefig(save_path / 'injection_map.png')
-
-                    for key in balanced_data['figures'].keys():
-                        balanced_data['figures'][key].savefig(save_path / f'injection_{key}.png')
-
-            return {'injection_maps':injection_maps,
-                    'tt_ramp':tt_ramp,
-                    'max_inj':max_data,
-                    'bal_data':balanced_data}
         else:
-            return 0
+            balanced_data = None
+
+        if save_path is not None:
+            images_info = [{'data':injection_maps, 'extname':'TT map', 'segments':",".join(map(str, self._injection_segments))}]
+            tables_info = [{'extname':'TT axes', 'columns':[('tip', 'D', tt_ramp), ('tilt', 'D', tt_ramp)]},
+                        {'extname':'Centroids (mrad)', 'columns':[('segments', 'J', self._injection_segments),
+                                                                    ('tip', 'D', max_data['max_tt'][:,0]),
+                                                                    ('tilt', 'D', max_data['max_tt'][:,1])]},
+                        {'extname':'Width (mrad)', 'columns':[('segments', 'J', self._injection_segments),
+                                                                ('tip', 'D', max_data['params'][:,3]),
+                                                                ('tilt', 'D', max_data['params'][:,4])]}]
+
+            name = 'injection_telemetry_' + datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + '.fits'
+            filename = save_path / name
+
+            self.save_telemetry(filename, images_info, tables_info)
+
+            if plot:
+                figname = 'injection_map_' + datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + '.png'
+                max_data['fig'][0].savefig(save_path / figname)
+
+                if balanced_data is not None:
+                    for key in balanced_data['figures'].keys():
+                        figname = 'injection_' + key + '_' + datetime.now().strftime("%Y-%m-%dT%H:%M:%S") + '.png'
+                        balanced_data['figures'][key].savefig(save_path / figname)
+
+        return {'injection_maps':injection_maps,
+                'tt_ramp':tt_ramp,
+                'max_inj':max_data,
+                'bal_data':balanced_data}
+
 
     def save_telemetry(self, filename, images_info, tables_info):
         """

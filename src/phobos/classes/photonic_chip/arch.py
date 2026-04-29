@@ -404,7 +404,7 @@ class _Arch:
         if verbose:
             print(f"✅ DAC calibration completed for {self.name} (shifters {list(self.topas)}).")
     
-    def phase_calibration(self, samples: int = 100, plot: bool = False, verbose: bool = False, return_metadata: bool = False):
+    def phase_calibration(self, samples: int = 100, plot: bool = False, verbose: bool = False, return_metadata: bool = False, path = None):
         """
         Calibrate phase-to-power conversion coefficients for all shifters in this chip.
         
@@ -420,6 +420,8 @@ class _Arch:
             If True, plot the fitted curves. Default is False.
         verbose : bool, optional
             If True, print calibration details. Default is False.
+        path : Pathlib object, optional
+            If not None, save the figure in 'path'
         
         Returns
         -------
@@ -572,6 +574,9 @@ class _Arch:
             # Turn off channel before next
             shifter.turn_off()
 
+        if  plot and (path is not None):
+            fig.savefig(path / f"chip_scans_plot_{datetime.now().strftime('%Y-%m-%dT%H:%M:%S')}.png", dpi=150)
+
         calib_coeffs = np.array(calib_coeffs)
         shifter_diag_fluxes = np.array(shifter_diag_fluxes)
 
@@ -581,70 +586,70 @@ class _Arch:
                 axs[j].axis('off')
             
             # ========== SECOND FIGURE: PHASE SCAN (0 to 2π) ==========
-            if verbose:
-                print("📊 Performing phase scan (0 to 2π) for verification...")
+            # if verbose:
+            #     print("📊 Performing phase scan (0 to 2π) for verification...")
             
-            phase_range = np.linspace(-2*np.pi, 2*np.pi, samples)
+            # phase_range = np.linspace(-2*np.pi, 2*np.pi, samples)
             
-            fig2, axs2 = plt.subplots(rows, cols, figsize=(4*cols, 3*rows), constrained_layout=True)
-            fig2.suptitle(f"Phase Scan Verification (0 to 2π) - {self.name}")
-            if n_shifters > 1:
-                axs2 = np.atleast_1d(axs2).flatten()
-            else:
-                axs2 = [axs2]
+            # fig2, axs2 = plt.subplots(rows, cols, figsize=(4*cols, 3*rows), constrained_layout=True)
+            # fig2.suptitle(f"Phase Scan Verification (0 to 2π) - {self.name}")
+            # if n_shifters > 1:
+            #     axs2 = np.atleast_1d(axs2).flatten()
+            # else:
+            #     axs2 = [axs2]
             
-            for idx, shifter in enumerate(self.shifters):
-                # Turn off all shifters first
-                self.turn_off(verbose=False)
+            # for idx, shifter in enumerate(self.shifters):
+            #     # Turn off all shifters first
+            #     self.turn_off(verbose=False)
                 
-                if verbose:
-                    print(f"  - Scanning phase for shifter {shifter.channel}...")
+            #     if verbose:
+            #         print(f"  - Scanning phase for shifter {shifter.channel}...")
                 
-                fluxes_phase = []
+            #     fluxes_phase = []
                 
-                # Scan phase from 0 to 2π
-                for phase in phase_range:
-                    shifter.set_phase(phase)
+            #     # Scan phase from 0 to 2π
+            #     for phase in phase_range:
+            #         shifter.set_phase(phase)
                     
-                    # Get outputs
-                    outs = Cred3().get_outputs()
-                    fluxes_phase.append(outs)
+            #         # Get outputs
+            #         outs = Cred3().get_outputs()
+            #         fluxes_phase.append(outs)
                 
-                fluxes_phase = np.array(fluxes_phase)  # Shape (n_samples, n_outputs)
+            #     fluxes_phase = np.array(fluxes_phase)  # Shape (n_samples, n_outputs)
 
-                # Calculate amplitudes to filter out unaffected outputs
-                amplitudes_phase = np.ptp(fluxes_phase, axis=0)
-                max_amp_phase = np.max(amplitudes_phase) if len(amplitudes_phase) > 0 else 0
-                threshold_phase = max_amp_phase / 10.0
+            #     # Calculate amplitudes to filter out unaffected outputs
+            #     amplitudes_phase = np.ptp(fluxes_phase, axis=0)
+            #     max_amp_phase = np.max(amplitudes_phase) if len(amplitudes_phase) > 0 else 0
+            #     threshold_phase = max_amp_phase / 10.0
                 
-                # Plot phase scan
-                ax2 = axs2[idx]
-                ax2.set_title(f"Shifter {shifter.channel}")
-                ax2.set_xlabel("Phase (rad)")
-                ax2.set_ylabel("Flux")
-                ax2.grid(True)
+            #     # Plot phase scan
+            #     ax2 = axs2[idx]
+            #     ax2.set_title(f"Shifter {shifter.channel}")
+            #     ax2.set_xlabel("Phase (rad)")
+            #     ax2.set_ylabel("Flux")
+            #     ax2.grid(True)
                 
-                # Add vertical lines at 0, π, 2π for reference
-                ax2.axvline(0, color='gray', linestyle='--', alpha=0.3, linewidth=0.8)
-                ax2.axvline(np.pi, color='gray', linestyle='--', alpha=0.3, linewidth=0.8)
-                ax2.axvline(2*np.pi, color='gray', linestyle='--', alpha=0.3, linewidth=0.8)
+            #     # Add vertical lines at 0, π, 2π for reference
+            #     ax2.axvline(0, color='gray', linestyle='--', alpha=0.3, linewidth=0.8)
+            #     ax2.axvline(np.pi, color='gray', linestyle='--', alpha=0.3, linewidth=0.8)
+            #     ax2.axvline(2*np.pi, color='gray', linestyle='--', alpha=0.3, linewidth=0.8)
                 
-                for i in range(fluxes_phase.shape[1]):
-                    if amplitudes_phase[i] < threshold_phase:
-                        # Skip outputs that are not affected by this shifter
-                        continue
+            #     for i in range(fluxes_phase.shape[1]):
+            #         if amplitudes_phase[i] < threshold_phase:
+            #             # Skip outputs that are not affected by this shifter
+            #             continue
                     
-                    y_data_phase = fluxes_phase[:, i]
-                    ax2.plot(phase_range, y_data_phase, 'o-', label=f'Out {i}', alpha=0.7)
+            #         y_data_phase = fluxes_phase[:, i]
+            #         ax2.plot(phase_range, y_data_phase, 'o-', label=f'Out {i}', alpha=0.7)
                 
-                ax2.legend(fontsize='small')
+            #     ax2.legend(fontsize='small')
                 
-                # Turn off shifter before next
-                shifter.turn_off()
+            #     # Turn off shifter before next
+            #     shifter.turn_off()
             
-            # Hide unused subplots in second figure
-            for j in range(len(self.shifters), len(axs2)):
-                axs2[j].axis('off')
+            # # Hide unused subplots in second figure
+            # for j in range(len(self.shifters), len(axs2)):
+            #     axs2[j].axis('off')
             
             plt.show()
             
