@@ -17,6 +17,7 @@ class FlipMount(metaclass=Singleton):
         """
         self.mount = Thorlabs.MFF(phobos.config.get('flip_mount.port'))
         self.sleep = phobos.config.get('flip_mount.stabilization_time') # Wait time after command
+        self.pos_label = ["up", "down"]
 
     def get_position(self) -> int:
         """
@@ -27,7 +28,9 @@ class FlipMount(metaclass=Singleton):
         int
             The current position index : 0 = up; 1 = down.
         """
-        return self.mount.get_state()
+        pos = self.mount.get_state()
+        print(f'Current flip position: {self.pos_label[pos]}')
+        return pos
 
     def move_to_position(self, position: int) -> None:
         """
@@ -48,14 +51,14 @@ class FlipMount(metaclass=Singleton):
             
         self.mount.move_to_state(position)
         time.sleep(self.sleep)
-        pos = self.get_position()
-        print(f"Moving FlipMount to position {pos}")
+        pos = self.mount.get_state()
+        print(f"Moving FlipMount to position {pos} ({self.pos_label[pos]})")
 
     def toggle(self) -> None:
         """
         Toggle the flip mount between position 0 and 1.
         """
-        pos = self.get_position()
+        pos = self.mount.get_state()
         new_position = 1 if pos == 0 else 0
         self.move_to_position(new_position)
 

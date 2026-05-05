@@ -980,7 +980,7 @@ class Injection(metaclass=Singleton):
         plot: bool = False,
         verbose: bool = False,
         save_path = None,
-        no_balance = False
+        no_balancing = False
     ):
 
         """Calibrate injection tip/tilt positions for all input channels.
@@ -1030,7 +1030,7 @@ class Injection(metaclass=Singleton):
             Print progress and debug information. Default is False.
         save_path: Path object, optional
             Path to directory where to save the diagnostic data
-        no_balance : bool, optional
+        no_balancing : bool, optional
             If True, skip finding balanced positions. Default is False.
 
         Returns
@@ -1075,7 +1075,7 @@ class Injection(metaclass=Singleton):
         injection_maps, tt_ramp = self.get_injection_maps(grid_n, ttamp, avg_frames, n_roi, use_tqdm, verbose)
         max_data = self.find_max_injection(injection_maps, tt_ramp, nb_std, plot, verbose)
 
-        if not no_balance:
+        if not no_balancing:
             balanced_data = self.find_balanced_injection(injection_maps, tt_ramp,
                                                         tilt_bound, avg_frames_bal, n_roi,
                                                         tilt_tol, plot, verbose)
