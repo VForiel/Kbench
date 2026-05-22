@@ -210,6 +210,89 @@ class PhaseShifter:
 
         return power, read_power
 
+
+    def set_phase2(self, phase: float, zero_point=0., verbose: bool = False):
+        """
+        Set phase shift for this channel by varying power.
+        
+        The phase is assumed to be a linear function of the injected power.
+        The zero-point in power corresponds at the reference phase (ie dPhi = 0).
+        
+        Parameters
+        ----------
+        phase : float
+            Target phase shift in radians.
+        zero_point : float
+            Power (in W) corresponding to the reference phase.
+        verbose : bool, optional
+            If True, print command details. Default is False.
+
+        Returns
+        -------
+        tuple of (float, float)
+            A tuple containing:
+            - power : float
+                The computed optical power in watts (W) needed to achieve the target phase.
+            - read_power : float
+                The actual measured optical power applied to the channel in watts (W).
+            
+        Notes
+        -----
+        The power is computed as: phase * self.phase_factor + zero_point
+        where self.phase_factor is the phase-to-power coefficient in W/rad.
+        This coefficient can be calibrated using Arch.phase_calibration().
+        
+        zero_point is the power sent to maintain the reference phase.
+        """
+        # Compute power needed for the desired phase
+
+        phase_factor = self.phase_factor
+        power_max = 1.
+
+        if phase_factor is None:
+            warnings.warn(
+                f"Phase factor not set for channel {self.channel}. Using default phase_factor=1.0. "
+                "Please calibrate using Arch.phase_calibration().",
+                UserWarning,
+                stacklevel=2
+            )
+            phase_factor = 1.0  # Default guess if not calibrated
+
+        if abs(phase) > np.pi:
+            phase = np.sign(phase) * np.pi
+            warnings.warn(
+                f"Phase must be between -pi and +pi rad. Requested value will be capped to {np.sign(phase)} pi.",
+                UserWarning,
+                stacklevel=2
+            )
+        power = phase * phase_factor + zero_point
+
+        if power < 0:
+            power = 0.
+            warnings.warn(
+                f"Power is negative, it is capped to 0.",
+                UserWarning,
+                stacklevel=2
+            )
+        elif power > power_max:
+            power = power_max
+            warnings.warn(
+                f"Power is above {power_max}, it is capped to {power_max}",
+                UserWarning,
+                stacklevel=2
+            )
+
+        # Apply the power
+        self.set_power(power, verbose=verbose)
+
+        # Read the applied power
+        read_power = self.get_power(verbose=verbose)
+        
+        if verbose:
+            print(f"🔧 Channel {self.channel}: phase={phase:.3f} rad → power={power:.3f} W")
+
+        requested_power = power
+        return requested_power, read_power
     # Getter methods ----------------------------------------------------------
         
     def get_current(self, verbose: bool = False) -> float:

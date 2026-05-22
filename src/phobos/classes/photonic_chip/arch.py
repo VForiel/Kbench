@@ -347,6 +347,46 @@ class _Arch:
         powers = np.array(powers)
         return powers
 
+    def set_phases2(self, phases, zero_points, verbose: bool = False):
+        """
+        Set phase shifts for all TOPAs in this chip.
+        
+        Parameters
+        ----------
+        phases : array-like
+            Array of target phase shifts in radians (one per TOPA).
+            Length must match number of TOPAs in architecture.
+        zero_points : array-like
+            Power (in W) corresponding to the reference phase.
+            Shape must be (N,2), where N is the number of TOPAs in architecture.
+            First column is the ID of the channel, 2nd column is the zero-point in W.
+        verbose : bool, optional
+            If True, print command details. Default is False.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape (n_shifters, 2) containing theoretical and applied powers 
+            for each shifter. Each row is [power_theoretical, power_applied] in watts (W).            
+            
+        Raises
+        ------
+        ValueError
+            If length of phases doesn't match number of TOPAs.
+        """
+        phases = np.asarray(phases)
+        if len(phases) != len(self.shifters):
+            raise ValueError(f"❌ Expected {len(self.shifters)} phase values, got {len(phases)}")
+
+        powers = []
+        for shifter, phase in zip(self.shifters, phases):
+            zp = zero_points[:,1][zero_points[:,0] == shifter.channel]
+            p_th, p_appl = shifter.set_phase2(phase, zp[0], verbose=verbose)
+            powers.append([p_th, p_appl])
+
+        powers = np.array(powers)
+        return powers
+    
     def get_phases(self, verbose: bool = False) -> np.ndarray:
         """
         Query estimated phase shifts for all TOPAs in this chip.
