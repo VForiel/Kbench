@@ -52,7 +52,7 @@ class FlipMount(metaclass=Singleton):
         self.mount.move_to_state(position)
         time.sleep(self.sleep)
         pos = self.mount.get_state()
-        print(f"Moving FlipMount to position {pos} ({self.pos_label[pos]})")
+        print(f"FlipMount moved to position {pos} ({self.pos_label[pos]})")
 
     def toggle(self) -> None:
         """

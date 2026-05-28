@@ -85,6 +85,12 @@ def main():
         control_cred3(sys.argv[2:])
         sys.exit(0)
 
+    # Flip mount --------------------------------------------------------------
+
+    if sys.argv[1] in ['flip', 'flipmount']:
+        control_flip_mount(sys.argv[2:])
+        sys.exit(0)
+
     # Setup script ------------------------------------------------------------
 
     if sys.argv[1] in ['setup']:
@@ -146,6 +152,7 @@ def show_help():
     print("  filter   Control filter wheel (slot selection)")
     print("  pointgrey  Point Grey camera utilities (reset)")
     print("  cred3    C-Red 3 camera utilities (take dark frames)")
+    print("  flip     Control Thorlabs flip mount (MFF101)")
     print("  config   Manage configuration files and settings")
     print("  setup    Run the interactive bench setup script")
     print("  shutdown Run the bench shutdown script")
@@ -848,6 +855,109 @@ def control_cred3(args):
 
     print("❌ Error: Invalid cred3 command.")
     print("ℹ️ Use 'phob cred3 --help' for usage information.")
+    sys.exit(1)
+
+#==============================================================================
+# Flip mount utilities
+#==============================================================================
+
+def control_flip_mount(args):
+
+    def show_help():
+        print("🔀 FLIP MOUNT - Thorlabs MFF101 Control")
+        print("="*45)
+        print("Usage: phob flip get")
+        print("       phob flip set [position]")
+        print("       phob flip toggle")
+        print("       phob flip [options]")
+
+        print("\n🎯 Commands:")
+        print("  get              Show current flip mount position")
+        print("  set [position]   Move to position (0/up or 1/down)")
+        print("  toggle           Toggle between up and down positions")
+
+        print("\n📋 Information:")
+        print("  -h, --help       Show this help message")
+
+        print("\n💡 Examples:")
+        print("  phob flip get            # Show current position")
+        print("  phob flip set 0          # Move to position 0 (up)")
+        print("  phob flip set up         # Move to position 0 (up)")
+        print("  phob flip set 1          # Move to position 1 (down)")
+        print("  phob flip set down       # Move to position 1 (down)")
+        print("  phob flip toggle         # Toggle between positions")
+
+    # No command --------------------------------------------------------------
+
+    if len(args) < 1:
+        print("❌ Error: No flip mount command provided.")
+        print("ℹ️ Use 'phob flip --help' for usage information.")
+        sys.exit(1)
+
+    # Help --------------------------------------------------------------------
+
+    if args[0] in ['--help', '-h']:
+        show_help()
+        sys.exit(0)
+
+    # Get position ------------------------------------------------------------
+
+    if args[0] in ['get']:
+        print("⌛ Getting current flip mount position...")
+        try:
+            fm = phobos.FlipMount()
+            fm.get_position()
+            sys.exit(0)
+        except Exception as e:
+            print(f"❌ Error: Failed to get flip mount position: {e}")
+            sys.exit(1)
+
+    # Set position ------------------------------------------------------------
+
+    if args[0] in ['set']:
+        if len(args) < 2:
+            print("❌ Error: No position provided.")
+            print("ℹ️ Usage: phob flip set [0|1|up|down]")
+            sys.exit(1)
+
+        # Parse position (accept 0/1 or up/down)
+        position_arg = args[1].lower()
+        if position_arg in ['0', 'up']:
+            position = 0
+        elif position_arg in ['1', 'down']:
+            position = 1
+        else:
+            print(f"❌ Error: Invalid position '{args[1]}'.")
+            print("ℹ️ Valid values: 0, 1, up, down")
+            sys.exit(1)
+
+        print(f"⌛ Moving flip mount to position {position}...")
+        try:
+            fm = phobos.FlipMount()
+            fm.move_to_position(position)
+            print("✅ Done")
+            sys.exit(0)
+        except Exception as e:
+            print(f"❌ Error: Failed to move flip mount: {e}")
+            sys.exit(1)
+
+    # Toggle ------------------------------------------------------------------
+
+    if args[0] in ['toggle']:
+        print("⌛ Toggling flip mount position...")
+        try:
+            fm = phobos.FlipMount()
+            fm.toggle()
+            print("✅ Done")
+            sys.exit(0)
+        except Exception as e:
+            print(f"❌ Error: Failed to toggle flip mount: {e}")
+            sys.exit(1)
+
+    # Invalid args ------------------------------------------------------------
+
+    print(f"❌ Error: Invalid flip mount command '{args[0]}'.")
+    print("ℹ️ Use 'phob flip --help' for usage information.")
     sys.exit(1)
 
 #==============================================================================
