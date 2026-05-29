@@ -46,7 +46,29 @@ autodoc_default_options = {
     'show-inheritance': True,
 }
 
-autodoc_mock_imports = ["bmc", "serial", "matplotlib", "matplotlib.pyplot", "matplotlib.animation", "xaosim", "xaosim.shmlib", "astropy", "scipy", "toml"]
+autodoc_mock_imports = [
+    "bmc",
+    "serial",
+    "matplotlib",
+    "matplotlib.pyplot",
+    "matplotlib.animation",
+    "xaosim",
+    "xaosim.shmlib",
+    "astropy",
+    "scipy",
+    "toml",
+    "pylablib",
+    "pylablib.devices",
+    "pylablib.devices.Thorlabs",
+    "numba",
+]
+
+# Keep strict builds useful while ignoring unresolved external symbols used in docstrings.
+nitpick_ignore = [
+    ("py:class", "optional"),
+    ("py:class", "ndarray"),
+    ("py:class", "serial.Serial"),
+]
 
 myst_enable_extensions = [
     "amsmath",

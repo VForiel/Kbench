@@ -8,10 +8,6 @@
 :align: center
 ```
 
-```{image} _static/PHOB_full3.png
-:align: center
-```
-
 ```{image} _static/Photonics1.png
 :align: center
 ```
