@@ -132,7 +132,9 @@ Add the following rules:
 ```bash
 ACTION=="add",ENV{ID_BUS}=="usb",ENV{ID_SERIAL_SHORT}=="AC01ZP6W",SYMLINK+="ttyUSBzaber"
 ACTION=="add",ENV{ID_BUS}=="usb",ENV{ID_SERIAL_SHORT}=="TP02052235-13923",SYMLINK+="ttyUSBthorlabs"
+ACTION=="add",ENV{ID_BUS}=="usb",ENV{ID_SERIAL_SHORT}=="37001886",SYMLINK+="ttyUSBFlipMount"
 ACTION=="add",ENV{ID_BUS}=="usb",ENV{ID_SERIAL_SHORT}=="A64MV77S",SYMLINK+="ttyUSBnewport"
+ACTION=="add",ENV{ID_BUS}=="usb",ENV{ID_SERIAL_SHORT}=="c6db877177fded11906c6919f9a91825",SYMLINK+="ttyUSBNkt"
 ```
 
 Apply the rules:
@@ -146,9 +148,23 @@ Or reboot the computer.
 **Device mappings:**
 - `ttyUSBzaber`: Zaber linear stages
 - `ttyUSBthorlabs`: Thorlabs filter wheel
+- `ttyUSBFlipMount`: Thorlabs MFF101 flip mount
 - `ttyUSBnewport`: Newport mask wheel
+- `ttyUSBNkt`: NKT photonics supercontinuum source
 
 phobos reads these device IDs from the `config.yml` file.
+
+### Flip Mount Troubleshooting (MFF101)
+
+If `FlipMount()` fails with a timeout-like traceback similar to:
+
+```
+ThorlabsBackendError: read returned less than expected: 0 instead of 1
+```
+
+try a full power cycle of the flip mount power supply (turn it off, wait a few seconds, then turn it back on).
+
+This has been observed to recover communication immediately in cases where USB enumeration succeeds but the device does not respond to APT commands.
 
 ## Deformable Mirror (BMC)
 

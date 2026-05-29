@@ -10,6 +10,7 @@ This section contains the complete API reference for all PHOBos classes and modu
 
 deformable_mirror
 filter_wheel
+flip_mount
 photonic_chip
 pupil_mask
 cred3
