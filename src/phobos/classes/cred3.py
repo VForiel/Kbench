@@ -181,29 +181,100 @@ class Cred3(metaclass=Singleton):
         
         return [crop.copy() for crop in crops]
     
-    def crop_outputs_from_image(self, img: np.ndarray) -> list[np.ndarray]:
+    def _crop_rectangles(
+        self,
+        img: np.ndarray,
+        crop_rectangles: np.ndarray,
+    ) -> list[np.ndarray]:
         """
-        Crop output regions from an image using configured centers and sizes.
-        
+        Internal helper to crop rectangular regions from an image.
+
         Parameters
         ----------
         img : ndarray
             Input image to crop from.
-            
+        crop_rectangles : ndarray
+            Array of rectangles with shape (N, 4), each as [x1, y1, x2, y2].
+
+        Returns
+        -------
+        crops : list of ndarray
+            List of cropped sub-images.
+        """
+        img_t = np.transpose(img)  # Keep same convention as _crop_regions
+        rectangles = np.asarray(crop_rectangles, dtype=int)
+
+        if rectangles.shape[1] != 4:
+            raise ValueError("crop_rectangles must have shape (N, 4) with [x1, y1, x2, y2].")
+
+        crops: list[np.ndarray] = []
+        x_max, y_max = img_t.shape[0], img_t.shape[1]
+
+        for i, (x1, y1, x2, y2) in enumerate(rectangles):
+            if x2 <= x1 or y2 <= y1:
+                raise ValueError(f"Invalid rectangle at index {i}: [{x1}, {y1}, {x2}, {y2}]")
+
+            # Clamp to image boundaries
+            xc1, yc1 = max(0, x1), max(0, y1)
+            xc2, yc2 = min(x_max, x2+1), min(y_max, y2+1)
+
+            crop = img_t[xc1:xc2, yc1:yc2]
+            if crop.size == 0:
+                print(f"⚠️ Rectangle {i} outside image boundaries")
+                h = max(1, y2 - y1)
+                w = max(1, x2 - x1)
+                crops.append(np.zeros((h, w), dtype=img.dtype))
+            else:
+                crops.append(crop.T.copy())
+
+        return crops
+
+    def crop_outputs_from_image(self, img: np.ndarray, crop_mode: str = 'centers') -> list[np.ndarray]:
+        """
+        Crop output regions from an image using the selected configured strategy.
+
+        Both cropping strategies can be defined in the configuration file:
+        - 'centers': uses `cred3.output_centers` and `cred3.output_sizes`
+        - 'rectangles': uses `cred3.output_rectangles` ([x1, y1, x2, y2] each)
+
+        Parameters
+        ----------
+        img : ndarray
+            Input image to crop from.
+        crop_mode : str, optional
+            Cropping strategy to use, either 'centers' or 'rectangles'.
+            Default is 'centers'.
+
         Returns
         -------
         crops : list of ndarray
             List of cropped sub-images for each configured output.
+
+        Examples
+        --------
+        >>> camera = Cred3()
+        >>> img = camera.get_image()
+        >>> crops_c = camera.crop_outputs_from_image(img, crop_mode='centers')
+        >>> crops_r = camera.crop_outputs_from_image(img, crop_mode='rectangles')
         """
-        if self.output_centers is None:
-            raise ValueError("output_centers not configured in phobos.config")
-        
-        return self._crop_regions(img, self.output_centers, self.output_sizes)
+        if crop_mode == 'centers':
+            if self.output_centers is None:
+                raise ValueError("output_centers not configured in phobos.config")
+            return self._crop_regions(img, self.output_centers, self.output_sizes)
+
+        elif crop_mode == 'rectangles':
+            if self.output_rectangles is None:
+                raise ValueError("output_rectangles not configured in phobos.config")
+            return self._crop_rectangles(img, self.output_rectangles)
+
+        else:
+            raise ValueError(f"Unknown mode: {crop_mode}. Use 'centers' or 'rectangles'.")
 
     def get_outputs(self,
                    subtract_dark: bool = True,
                    flux_mode: str = 'mean',
                    stack=1,
+                   crop_mode: str = 'centers'
                    ) -> np.ndarray:
         """
         Get the flux around configured output centers.
@@ -247,18 +318,26 @@ class Cred3(metaclass=Singleton):
         # Get the latest image
         img = self.get_image(subtract_dark=subtract_dark, stack=stack)
         
-        crops = self.crop_outputs_from_image(img)
+        crops = self.crop_outputs_from_image(img, crop_mode=crop_mode)
         
         # Compute flux
-        flux = np.zeros(len(crops))
-        for i, crop in enumerate(crops):        
+        flux = []
+        if crop_mode == 'rectangles':
+            axes = (0,)
+        else:
+            axes = (0,1)
+
+        for i, crop in enumerate(crops):
             if flux_mode == 'sum':
-                flux[i] = np.sum(crop)
+                # flux[i] = np.sum(crop, axis=axes)
+                flux.append(np.sum(crop, axis=axes))
             elif flux_mode == 'mean':
-                flux[i] = np.mean(crop)
+                # flux[i] = np.mean(crop, axis=axes)
+                flux.append(np.mean(crop, axis=axes))
             else:
                 raise ValueError(f"Unknown flux_mode: {flux_mode}. Use 'mean' or 'sum'.")
                 
+        flux = np.array(flux)
         return flux
 
     def get_bulk(self,
@@ -429,7 +508,7 @@ class Cred3(metaclass=Singleton):
         
         return dark_mean
     
-    def check_cropping(self, subtract_dark: bool = True):
+    def check_cropping(self, crop_mode, subtract_dark: bool = True):
         """
         Display the cropped output regions to verify they well capture the output signals.
         
@@ -439,18 +518,20 @@ class Cred3(metaclass=Singleton):
         
         Parameters
         ----------
+        crop_mode : str
+            The cropping mode to use, either 'centers' or 'rectangles'.
         subtract_dark : bool, optional
             Whether to subtract the dark frame. Default is True.
         
         Examples
         --------
         >>> camera = Cred3()
-        >>> camera.check_cropping()
+        >>> camera.check_cropping('centers')
         """
         import matplotlib.pyplot as plt
         
         img = self.get_image(subtract_dark=subtract_dark)
-        crops = self.crop_outputs_from_image(img)
+        crops = self.crop_outputs_from_image(img, crop_mode=crop_mode)
         
         n = len(crops)
         ncols = 1 if n == 1 else 2
@@ -461,7 +542,7 @@ class Cred3(metaclass=Singleton):
         for i, crop in enumerate(crops):
             plt.subplot(nrows, ncols, i + 1)
             plt.title(f'Channel {i}')
-            plt.imshow(crop, origin='lower', cmap='jet', vmin=0, vmax=vmax)
+            plt.imshow(crop, aspect='auto', origin='lower', cmap='jet', vmin=0, vmax=vmax)
             plt.colorbar()
         plt.tight_layout()
         plt.show()
@@ -508,5 +589,8 @@ class Cred3(metaclass=Singleton):
         bulk_center = phobos.config.get('cred3.bulk_center')
         self.bulk_center = np.array(bulk_center) if bulk_center else None
         self.bulk_size = phobos.config.get('cred3.bulk_size')
+
+        output_rectangles = phobos.config.get("cred3.output_rectangles")
+        self.output_rectangles = np.array(output_rectangles, dtype=int) if output_rectangles else None
         
         print("✅ Cred3 reset to configuration defaults.")

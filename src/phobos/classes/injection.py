@@ -108,25 +108,34 @@ class Injection(metaclass=Singleton):
 
     # -- preset positions -----------------------------------------------------
 
-    def off(self, channels=None) -> None:
+    def off(self, channels=None, tip=None, tilt=None) -> None:
         """Turn off injection by tilting segments away from the chip inputs.
 
         Parameters
         ----------
         channels : int, array-like, or None, optional
             Channel number(s) (0-based) to turn off, or ``None`` for all.
+        tip : float or None, optional
+            Tip value (mrad) for the off position. If ``None``, defaults to
+            0.0 mrad.
+        tilt : float or None, optional
+            Tilt value (mrad) for the off position. If ``None``, defaults to
+            ``dm.tilt_range[0]`` (max negative tilt to deflect light).
 
         Notes
         -----
-        The off position is: piston = mean(piston_range), tip = 0 mrad,
-        tilt = ``dm.tilt_range[0]`` (max negative tilt to deflect light).
+        The default off position is: piston = mean(piston_range), tip = 0 mrad,
+        tilt = ``dm.tilt_range[0]``. Providing ``tip`` and/or ``tilt`` overrides
+        the corresponding default value.
         """
         seg_indices = self._parse_channels(channels)
         piston = DM().mid_piston
-        off_tilt = float(Config().get('dm.tilt_range', [-5.47, 5.0])[0])
+
+        off_tip = 0.0 if tip is None else float(tip)
+        off_tilt = float(Config().get('dm.tilt_range', [-5.47, 5.0])[0]) if tilt is None else float(tilt)
 
         for seg_idx in seg_indices:
-            self.dm.segments[seg_idx].set_ptt(piston, 0.0, off_tilt)
+            self.dm.segments[seg_idx].set_ptt(piston, off_tip, off_tilt)
 
         print(f"Injection OFF on channels "
               f"{[self._channel_for_segment(s) for s in seg_indices]} "
@@ -257,6 +266,7 @@ class Injection(metaclass=Singleton):
         n_roi: int = 4,
         use_tqdm: bool = True,
         verbose: bool = False,
+        tt_off: list = [None, None]
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Scan tip/tilt space and build injection flux maps for all channels.
 
@@ -280,6 +290,8 @@ class Injection(metaclass=Singleton):
             Show a progress bar if *tqdm* is available.  Default is True.
         verbose : bool, optional
             Print progress information.  Default is False.
+        tt_off : list, optional
+            Force Tip/tilt positions for off position. Default is [None, None].
 
         Returns
         -------
@@ -313,7 +325,7 @@ class Injection(metaclass=Singleton):
 
             # Park all other channels
             others = [c for c in range(n_ch) if c != ch_idx]
-            self.off(others)
+            self.off(others, tip=tt_off[0], tilt=tt_off[1])
 
             for i, tip in enumerate(tt_ramp):
                 for j, tilt in enumerate(tt_ramp):
@@ -980,7 +992,8 @@ class Injection(metaclass=Singleton):
         plot: bool = False,
         verbose: bool = False,
         save_path = None,
-        no_balancing = False
+        no_balancing = False,
+        tt_off: list = [None, None]
     ):
 
         """Calibrate injection tip/tilt positions for all input channels.
@@ -1032,6 +1045,8 @@ class Injection(metaclass=Singleton):
             Path to directory where to save the diagnostic data
         no_balancing : bool, optional
             If True, skip finding balanced positions. Default is False.
+        tt_off : list, optional
+            Force Tip/tilt positions for off position. Default is [None, None].
 
         Returns
         -------
@@ -1072,7 +1087,7 @@ class Injection(metaclass=Singleton):
         >>> maps = result['injection_maps']
         >>> balanced_positions = result['bal_data']['balanced']
         """
-        injection_maps, tt_ramp = self.get_injection_maps(grid_n, ttamp, avg_frames, n_roi, use_tqdm, verbose)
+        injection_maps, tt_ramp = self.get_injection_maps(grid_n, ttamp, avg_frames, n_roi, use_tqdm, verbose, tt_off)
         max_data = self.find_max_injection(injection_maps, tt_ramp, nb_std, plot, verbose)
 
         if not no_balancing:
