@@ -108,7 +108,7 @@ class Injection(metaclass=Singleton):
 
     # -- preset positions -----------------------------------------------------
 
-    def off(self, channels=None, tip=None, tilt=None) -> None:
+    def off(self, channels=None, tip=None, tilt=None, verbose=True) -> None:
         """Turn off injection by tilting segments away from the chip inputs.
 
         Parameters
@@ -121,6 +121,8 @@ class Injection(metaclass=Singleton):
         tilt : float or None, optional
             Tilt value (mrad) for the off position. If ``None``, defaults to
             ``dm.tilt_range[0]`` (max negative tilt to deflect light).
+        verbose : bool, optional
+            If True, print verbose output.
 
         Notes
         -----
@@ -137,17 +139,20 @@ class Injection(metaclass=Singleton):
         for seg_idx in seg_indices:
             self.dm.segments[seg_idx].set_ptt(piston, off_tip, off_tilt)
 
-        print(f"Injection OFF on channels "
-              f"{[self._channel_for_segment(s) for s in seg_indices]} "
-              f"(segments {seg_indices})")
+        if verbose:
+            print(f"Injection OFF on channels "
+                f"{[self._channel_for_segment(s) for s in seg_indices]} "
+                f"(segments {seg_indices})")
 
-    def flat(self, channels=None) -> None:
+    def flat(self, channels=None, verbose=True) -> None:
         """Reset injection segments to flat position (zero tip/tilt).
 
         Parameters
         ----------
         channels : int, array-like, or None, optional
             Channel number(s) (0-based), or ``None`` for all.
+        verbose : bool, optional
+            If True, print verbose output.
 
         Notes
         -----
@@ -159,34 +164,40 @@ class Injection(metaclass=Singleton):
         for seg_idx in seg_indices:
             self.dm.segments[seg_idx].set_ptt(piston, 0.0, 0.0)
 
-        print(f"Injection FLAT on channels "
-              f"{[self._channel_for_segment(s) for s in seg_indices]} "
-              f"(segments {seg_indices})")
+        if verbose:
+            print(f"Injection FLAT on channels "
+                  f"{[self._channel_for_segment(s) for s in seg_indices]} "
+                  f"(segments {seg_indices})")
 
-    def zero(self, channels=None) -> None:
+    def zero(self, channels=None, verbose=True) -> None:
         """Reset injection segments to zero (piston=0, tip=0, tilt=0).
 
         Parameters
         ----------
         channels : int, array-like, or None, optional
             Channel number(s) (0-based), or ``None`` for all.
+        verbose : bool, optional
+            If True, print verbose output.
         """
         seg_indices = self._parse_channels(channels)
 
         for seg_idx in seg_indices:
             self.dm.segments[seg_idx].set_ptt(0.0, 0.0, 0.0)
 
-        print(f"Injection ZERO on channels "
-              f"{[self._channel_for_segment(s) for s in seg_indices]} "
-              f"(segments {seg_indices})")
+        if verbose:
+            print(f"Injection ZERO on channels "
+                f"{[self._channel_for_segment(s) for s in seg_indices]} "
+                f"(segments {seg_indices})")
 
-    def set_max(self, channels=None) -> None:
+    def set_max(self, channels=None, verbose=True) -> None:
         """Apply stored *max* injection calibration to selected channels.
 
         Parameters
         ----------
         channels : int, array-like, or None, optional
             Channel number(s) (0-based), or ``None`` for all.
+        verbose : bool, optional
+            If True, print verbose output.
 
         Raises
         ------
@@ -214,17 +225,20 @@ class Injection(metaclass=Singleton):
             tip, tilt = max_list[ch]
             self.dm.segments[seg_idx].set_ptt(piston, float(tip), float(tilt))
 
-        print(f"Injection MAX on channels "
-              f"{[self._channel_for_segment(s) for s in seg_indices]} "
-              f"(segments {seg_indices})")
+        if verbose:
+            print(f"Injection MAX on channels "
+                  f"{[self._channel_for_segment(s) for s in seg_indices]} "
+                  f"(segments {seg_indices})")
 
-    def set_balanced(self, channels=None) -> None:
+    def set_balanced(self, channels=None, verbose=True) -> None:
         """Apply stored *balanced* injection calibration to selected channels.
 
         Parameters
         ----------
         channels : int, array-like, or None, optional
             Channel number(s) (0-based), or ``None`` for all.
+        verbose : bool, optional
+            If True, print verbose output.
 
         Raises
         ------
@@ -252,9 +266,10 @@ class Injection(metaclass=Singleton):
             tip, tilt = bal_list[ch]
             self.dm.segments[seg_idx].set_ptt(piston, float(tip), float(tilt))
 
-        print(f"Injection BALANCED on channels "
-              f"{[self._channel_for_segment(s) for s in seg_indices]} "
-              f"(segments {seg_indices})")
+        if verbose:
+            print(f"Injection BALANCED on channels "
+                  f"{[self._channel_for_segment(s) for s in seg_indices]} "
+                  f"(segments {seg_indices})")
 
     # -- injection maps -------------------------------------------------------
 

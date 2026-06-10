@@ -444,7 +444,7 @@ class _Arch:
         if verbose:
             print(f"✅ DAC calibration completed for {self.name} (shifters {list(self.topas)}).")
     
-    def phase_calibration(self, samples: int = 100, plot: bool = False, verbose: bool = False, return_metadata: bool = False, path = None):
+    def phase_calibration(self, samples: int = 100, plot: bool = False, verbose: bool = False, return_metadata: bool = False, path = None, crop_mode = 'centers', nroi = 10):
         """
         Calibrate phase-to-power conversion coefficients for all shifters in this chip.
         
@@ -462,7 +462,11 @@ class _Arch:
             If True, print calibration details. Default is False.
         path : Pathlib object, optional
             If not None, save the figure in 'path'
-        
+        crop_mode : str, optional
+            The crop mode to use for the Cred3 outputs: 'centers' or 'rectangles_integrated'. Default is 'centers'.
+        nroi : int, optional
+            The number of regions of interest (ROIs) to use for the Cred3 outputs. Default is 10.
+
         Returns
         -------
         np.ndarray
@@ -510,7 +514,7 @@ class _Arch:
                 shifter.set_power(p)
                 
                 # Get outputs
-                outs = Cred3().get_outputs()
+                outs = Cred3().get_outputs(crop_mode=crop_mode)[:nroi]
                 fluxes.append(outs)
             
             fluxes = np.array(fluxes) # Shape (n_samples, n_outputs)

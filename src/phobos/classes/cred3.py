@@ -236,13 +236,14 @@ class Cred3(metaclass=Singleton):
         Both cropping strategies can be defined in the configuration file:
         - 'centers': uses `cred3.output_centers` and `cred3.output_sizes`
         - 'rectangles': uses `cred3.output_rectangles` ([x1, y1, x2, y2] each)
+        - 'rectangles_integrated': like 'rectangles' but return the integrated flux in each region.
 
         Parameters
         ----------
         img : ndarray
             Input image to crop from.
         crop_mode : str, optional
-            Cropping strategy to use, either 'centers' or 'rectangles'.
+            Cropping strategy to use, either 'centers' or 'rectangles' or 'rectangles_integrated.
             Default is 'centers'.
 
         Returns
@@ -256,13 +257,14 @@ class Cred3(metaclass=Singleton):
         >>> img = camera.get_image()
         >>> crops_c = camera.crop_outputs_from_image(img, crop_mode='centers')
         >>> crops_r = camera.crop_outputs_from_image(img, crop_mode='rectangles')
+        >>> crops_ri = camera.crop_outputs_from_image(img, crop_mode='rectangles_integrated')
         """
         if crop_mode == 'centers':
             if self.output_centers is None:
                 raise ValueError("output_centers not configured in phobos.config")
             return self._crop_regions(img, self.output_centers, self.output_sizes)
 
-        elif crop_mode == 'rectangles':
+        elif crop_mode == 'rectangles' or crop_mode == 'rectangles_integrated':
             if self.output_rectangles is None:
                 raise ValueError("output_rectangles not configured in phobos.config")
             return self._crop_rectangles(img, self.output_rectangles)
