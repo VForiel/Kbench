@@ -261,7 +261,8 @@ class _Arch:
             raise ValueError(f"❌ Expected {len(self.shifters)} power values, got {len(powers)}")
         
         for shifter, power in zip(self.shifters, powers):
-            shifter.set_power(power, verbose=verbose)
+            shifter.set_power(power, verbose=verbose, sleep=False)
+        time.sleep(Config().get('photonic_chip.stabilization_time', 0.001))
     
     def get_powers(self, verbose: bool = False) -> np.ndarray:
         """
@@ -554,8 +555,8 @@ class _Arch:
 
                 p0 = [(np.max(y_data)-np.min(y_data))/2, 0.6, 0, 0, np.mean(y_data)]
 
-                bounds_min = [0,      0.5,-np.pi,-(np.max(y_data)-np.min(y_data))/(power_range.max()-power_range.min()),-np.inf]
-                bounds_max = [np.inf, 1.2  , np.pi, (np.max(y_data)-np.min(y_data))/(power_range.max()-power_range.min()), np.inf]
+                bounds_min = [0,      0.5,-np.pi*1.5,-(np.max(y_data)-np.min(y_data))/(power_range.max()-power_range.min()),-np.inf]
+                bounds_max = [np.inf, 1.2  , np.pi*1.5, (np.max(y_data)-np.min(y_data))/(power_range.max()-power_range.min()), np.inf]
                 
                 try:
 

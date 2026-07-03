@@ -109,7 +109,7 @@ class PhaseShifter:
         XPOW().send_command(f"CH:{self.channel}:VOLT:{int(voltage_value)}", verbose=verbose, output=False)
         time.sleep(Config().get('photonic_chip.stabilization_time', 0.001))
     
-    def set_power(self, power: float, verbose: bool = False):
+    def set_power(self, power: float, verbose: bool = False, sleep=True):
         """
         Set optical power for this channel.
         
@@ -152,7 +152,9 @@ class PhaseShifter:
         
         # Apply voltage
         self.set_voltage(voltage, verbose=verbose)
-        time.sleep(Config().get('photonic_chip.stabilization_time', 0.001))
+
+        if sleep:
+            time.sleep(Config().get('photonic_chip.stabilization_time', 0.001))
         
         if verbose:
             print(f"🔧 Channel {self.channel}: power={power:.3f} W → voltage={voltage:.3f} V @ 300 mA")

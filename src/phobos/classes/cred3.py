@@ -78,6 +78,11 @@ class Cred3(metaclass=Singleton):
             mode_prefix = "⛱️ [SANDBOX] " if SANDBOX_MODE else ""
             print(f"{mode_prefix}Cred3 camera initialized without dark subtraction")
 
+        # Prepare output rectangles cropping
+        output_rectangles = phobos.config.get("cred3.output_rectangles")
+        self.output_rectangles = np.array(output_rectangles, dtype=int) if output_rectangles else None
+        
+
 
     def get_image(self, subtract_dark: bool = True, stack: int = 1) -> np.ndarray:
         """
