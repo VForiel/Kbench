@@ -340,7 +340,7 @@ class Injection(metaclass=Singleton):
 
             # Park all other channels
             others = [c for c in range(n_ch) if c != ch_idx]
-            self.off(others, tip=tt_off[0], tilt=tt_off[1])
+            self.off(others, tip=tt_off[0], tilt=tt_off[1], verbose=verbose)
 
             for i, tip in enumerate(tt_ramp):
                 for j, tilt in enumerate(tt_ramp):
@@ -354,7 +354,7 @@ class Injection(metaclass=Singleton):
                     injection_maps[ch_idx, i, j] = float(np.sum(flux))
 
             # Park this channel while scanning the next one
-            self.off(ch_idx)
+            self.off(ch_idx, verbose=verbose)
 
         # Restore flat position at the end
         self.flat()
@@ -609,7 +609,8 @@ class Injection(metaclass=Singleton):
         x, y = np.meshgrid(tt_ramp, tt_ramp) # tilt and tip
 
         # -- Find gross splodge's centroids and spread in tip and tilt
-        print("\n── Find gross TT for max injection and spread ──")
+        if verbose:
+            print("\n── Find gross TT for max injection and spread ──")
         params = []
         models = []
 
@@ -628,7 +629,8 @@ class Injection(metaclass=Singleton):
         chi2 = np.sum(residuals**2, (1,2)) / (injection_maps[0].size - len(popt))
 
         # -- Find fine splodge's centroids and spread in tip and tilt
-        print("\n── Find precise TT for max injection ──")
+        if verbose:
+            print("\n── Find precise TT for max injection ──")
         cropped_data = []
         params_cropped = []
         models_cropped = []
@@ -827,7 +829,8 @@ class Injection(metaclass=Singleton):
             flux_max[ch_idx] = best_flux
 
         # ── Balanced injection via dichotomy on tilt ─────────────────
-        print("\n── Balancing injection fluxes ──")
+        if verbose:
+            print("\n── Balancing injection fluxes ──")
 
         # Identify weakest channel
         flux_max = np.max(injection_maps, axis=(1,2))
@@ -863,7 +866,7 @@ class Injection(metaclass=Singleton):
 
             # Park all other channels
             others = [c for c in range(n_ch) if c != ch_idx]
-            self.off(others)
+            self.off(others, verbose=verbose)
 
             # Fix tip at max-flux value
             fixed_tip = float(tip_max_arr[ch_idx])
