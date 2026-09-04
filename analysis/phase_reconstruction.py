@@ -8,6 +8,8 @@ Created on Thu Mar 19 14:09:01 2026
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize
 import pickle
 from pathlib import Path
 import os
@@ -172,6 +174,7 @@ def plot_spectral_phase(
     spectral_phase: np.ndarray,
     spectral_axs: np.ndarray,
     xlabel: str,
+    ylabel: str = 'Phase [rad]',
     center: int = 320,
     half_width: int = 170,
     width: float = 7,
@@ -179,8 +182,9 @@ def plot_spectral_phase(
 ) -> tuple[plt.Figure, plt.Axes]:
     """Plot spectral phase curves across a wavelength range.
 
-    The two curves at the edges of the range are highlighted with their
-    corresponding wavelength.
+    Curves are colored by wavelength using a continuous colormap, with a
+    colorbar that provides the wavelength legend. The two curves at the edges
+    of the range are highlighted with their corresponding wavelength.
 
     Parameters
     ----------
@@ -205,15 +209,28 @@ def plot_spectral_phase(
         The created figure and axes.
     """
     lo, hi = center - half_width, center + half_width - 1
+    wavelengths = spectral_axs[0, lo : hi + 1]
+    color_map = plt.colormaps['viridis']
+    normalization = Normalize(vmin=wavelengths.min(), vmax=wavelengths.max())
+
     fig, axs = plt.subplots(1, 1, figsize=(width, width / FIGURE_RATIO))
-    axs.plot(x, spectral_phase[:, lo:hi], alpha=0.5)
-    axs.plot(x, spectral_phase[:, lo], lw=3, label=f'λ = {spectral_axs[0, lo]:.1f} nm')
-    axs.plot(x, spectral_phase[:, hi], lw=3, label=f'λ = {spectral_axs[0, hi]:.1f} nm')
+    for wavelength_index, wavelength in enumerate(wavelengths, start=lo):
+        axs.plot(
+            x,
+            spectral_phase[:, wavelength_index],
+            color=color_map(normalization(wavelength)),
+            alpha=0.5,
+        )
     axs.set_xlabel(xlabel, fontsize=LABEL_FS)
-    axs.set_ylabel('Phase [rad]', fontsize=LABEL_FS)
+    axs.set_ylabel(ylabel, fontsize=LABEL_FS)
     axs.grid()
-    axs.legend()
     axs.tick_params(labelsize=TICK_FS)
+    colorbar = fig.colorbar(
+        ScalarMappable(norm=normalization, cmap=color_map),
+        ax=axs,
+    )
+    colorbar.set_label('Wavelength [nm]', fontsize=LABEL_FS)
+    colorbar.ax.tick_params(labelsize=TICK_FS)
     if save_path:
         fig.savefig(save_path, dpi=300, bbox_inches='tight', format='png')
     fig.tight_layout()
@@ -270,15 +287,42 @@ piston_to_opd = lambda piston, rc=max_bright_pos: (piston - rc) * 2.0
 phase, unwrap = compute_phase(outs)
 spectral_phase, spectral_unwrap = compute_phase(outs_spectral)
 spectral_unwrap -= 2*np.pi
-plot_spectral_phase(opd_range, spectral_phase, spectral_axs, 'OPD [nm]', save_path=path + f'analysis_recons_phase_dm.png')
-plot_spectral_phase(opd_range, spectral_unwrap, spectral_axs, 'OPD [nm]', save_path=path + f'analysis_recons_phase_dm_unwrap.png')
+plot_spectral_phase(opd_range, spectral_phase, spectral_axs, 'OPD [nm]', 
+                    save_path=path + f'analysis_recons_phase_dm.png')
+plot_spectral_phase(opd_range, spectral_unwrap, spectral_axs, 'OPD [nm]', 
+                    save_path=path + f'analysis_recons_phase_dm_unwrap.png')
 
-dm_fit = np.polyfit(opd_range, spectral_unwrap[:,px_min:px_max], 1)
-dm_period = 2 * np.pi / dm_fit[0] 
+dm_fit = np.polyfit(opd_range, spectral_unwrap, 1)
+dm_period = 2 * np.pi / dm_fit[0, px_min:px_max]
 dm_period = dm_period / spectral_axs[0][px_min:px_max] # in lambda units
 
 spectral_unwrap_norm = spectral_unwrap * spectral_axs[0] / (2*np.pi)
 dm_fit_norm = np.polyfit(opd_range, spectral_unwrap_norm[:,px_min:px_max], 1)
+
+dm_ramps = np.array([np.poly1d(dm_fit[:,i])(opd_range) for i in range(dm_fit.shape[1])])
+dm_ramps = dm_ramps.T
+spectral_unwrap_rescaled = spectral_unwrap - dm_ramps
+figr, axsr = plot_spectral_phase(opd_range, spectral_unwrap_rescaled, spectral_axs, 
+                    'OPD [nm]', 'Residuals [rad]')
+axsr.set_ylim(-0.45, 0.45)
+figr.savefig(path + f'analysis_recons_phase_dm_unwrap_residuals.png', dpi=300, bbox_inches='tight', format='png')
+
+step_opd = np.diff(opd_range).mean()
+step_wl = np.diff(spectral_axs[0]).mean()
+fig, ax = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_WIDTH / FIGURE_RATIO))
+image = ax.imshow(spectral_unwrap_rescaled[:,px_min:px_max], aspect='auto', origin='lower',
+                  extent=[spectral_axs[0, px_min:px_max][0]-step_wl/2, spectral_axs[0, px_min:px_max][-1]+step_wl/2, 
+                          opd_range[0]-step_opd/2, opd_range[-1]+step_opd/2])
+ax.set_xlabel('Wavelength [nm]', fontsize=LABEL_FS)
+ax.set_ylabel('OPD [nm]', fontsize=LABEL_FS)
+ax.set_title('DM phase residuals', fontsize=TITLE_FS)
+ax.tick_params(labelsize=TICK_FS)
+colorbar = fig.colorbar(image, ax=ax)
+colorbar.set_label('Residual phase [rad]', fontsize=LABEL_FS)
+colorbar.ax.tick_params(labelsize=TICK_FS)
+fig.tight_layout()
+figr.savefig(path + f'analysis_recons_phase_dm_unwrap_residuals_map.png', dpi=300, bbox_inches='tight', format='png')
+
 
 
 #### TOPA scan ####
@@ -295,20 +339,83 @@ topa_max_null_pos = power_ramp[np.argmax(topa_outs[:, 0])]
 
 topa_phase, topa_unwrap = compute_phase(topa_outs)
 topa_spectral_phase, topa_spectral_unwrap = compute_phase(topa_outs_spectral)
-topa_spectral_unwrap -= 2*np.pi
-plot_spectral_phase(power_ramp, topa_spectral_phase, spectral_axs, 'Power ramp [W]', save_path=path + f'analysis_recons_phase_topa.png')
-topa_fit = np.polyfit(power_ramp, -topa_spectral_unwrap[:,px_min:px_max], 1)
-topa_period = 2 * np.pi / topa_fit[0] #* 2.1e-3 * 2.5e-5 * 0.7/1000 / 8.9
+mask = np.where(topa_spectral_unwrap[0] < 0 )[0]
+topa_spectral_unwrap[:, mask] += 2*np.pi
+plot_spectral_phase(power_ramp, topa_spectral_phase, spectral_axs, 
+                    'Power [W]', save_path=path + f'analysis_recons_phase_topa.png')
+plot_spectral_phase(power_ramp, topa_spectral_unwrap, spectral_axs, 
+                    'Power [W]', save_path=path + f'analysis_recons_phase_topa_unwrap.png')
+topa_fit = np.polyfit(power_ramp, -topa_spectral_unwrap, 1)
+topa_period = 2 * np.pi / topa_fit[0, px_min:px_max] #* 2.1e-3 * 2.5e-5 * 0.7/1000 / 8.9
 topa_period = topa_period / (spectral_axs[0][px_min:px_max]*1e-9)**2 # in lambda units
 
 topa_spectral_unwrap_norm = topa_spectral_unwrap * spectral_axs[0] / (2*np.pi)
 topa_fit_norm = np.polyfit(power_ramp, topa_spectral_unwrap_norm[:,px_min:px_max], 1)
+
+topa_ramps = np.array([np.poly1d(topa_fit[:,i])(power_ramp) for i in range(topa_fit.shape[1])])
+topa_ramps = topa_ramps.T
+topa_spectral_unwrap_rescaled = topa_spectral_unwrap + topa_ramps
+figr, axsr = plot_spectral_phase(power_ramp, topa_spectral_unwrap_rescaled, spectral_axs, 
+                    'Power [W]', 'Residuals [rad]')
+axsr.set_ylim(-0.45, 0.45)
+figr.savefig(path + f'analysis_recons_phase_topa_unwrap_residuals.png', dpi=300, bbox_inches='tight', format='png')
+
+step_power = np.diff(power_ramp).mean()
+step_wl = np.diff(spectral_axs[0]).mean()
+fig, ax = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_WIDTH / FIGURE_RATIO))
+image = ax.imshow(topa_spectral_unwrap_rescaled[:,px_min:px_max], aspect='auto', origin='lower',
+                  extent=[spectral_axs[0, px_min:px_max][0]-step_wl/2, spectral_axs[0, px_min:px_max][-1]+step_wl/2, 
+                          power_ramp[0]-step_power/2, power_ramp[-1]+step_power/2])
+ax.set_xlabel('Wavelength [nm]', fontsize=LABEL_FS)
+ax.set_ylabel('Power [W]', fontsize=LABEL_FS)
+ax.set_title('TOPA phase residuals', fontsize=TITLE_FS)
+ax.tick_params(labelsize=TICK_FS)
+colorbar = fig.colorbar(image, ax=ax)
+colorbar.set_label('Residual phase [rad]', fontsize=LABEL_FS)
+colorbar.ax.tick_params(labelsize=TICK_FS)
+fig.tight_layout()
+figr.savefig(path + f'analysis_recons_phase_topa_unwrap_residuals_map.png', dpi=300, bbox_inches='tight', format='png')
+
+fig, ax = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_WIDTH / FIGURE_RATIO))
+image = ax.imshow(spectral_unwrap_rescaled[:,px_min:px_max] - topa_spectral_unwrap_rescaled[:,px_min:px_max], aspect='auto', origin='lower',
+                  extent=[spectral_axs[0, px_min:px_max][0]-step_wl/2, spectral_axs[0, px_min:px_max][-1]+step_wl/2, 
+                          opd_range[0]-step_opd/2, opd_range[-1]+step_opd/2])
+ax.set_xlabel('Wavelength [nm]', fontsize=LABEL_FS)
+ax.set_ylabel('OPD [nm]', fontsize=LABEL_FS)
+ax.set_title('Diff phase residuals', fontsize=TITLE_FS)
+ax.tick_params(labelsize=TICK_FS)
+colorbar = fig.colorbar(image, ax=ax)
+colorbar.set_label('Residual phase [rad]', fontsize=LABEL_FS)
+colorbar.ax.tick_params(labelsize=TICK_FS)
+fig.tight_layout()
+
+fig, ax1 = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_WIDTH / FIGURE_RATIO))
+line1, = ax1.plot(spectral_axs[0][px_min:px_max], dm_period, color='tab:blue', label='DM scan')
+ax1.set_xlabel('Wavelength [nm]', size=LABEL_FS)
+ax1.set_ylabel(r'DM phase period [$\lambda$]', size=LABEL_FS, color='tab:blue')
+ax1.tick_params(axis='y', labelcolor='tab:blue', labelsize=TICK_FS)
+ax1.tick_params(axis='x', labelsize=TICK_FS)
+ax1.grid()
+
+ax2 = ax1.twinx()
+line2, = ax2.plot(spectral_axs[0][px_min:px_max], topa_period, color='tab:orange', label='TOPA scan')
+ax2.set_ylabel(r'TOPA phase period [$\lambda^2$]', size=LABEL_FS, color='tab:orange')
+ax2.tick_params(axis='y', labelcolor='tab:orange', labelsize=TICK_FS)
+
+ax1.legend(handles=[line1, line2], fontsize=LEGEND_FS, loc='best')
+fig.suptitle(f'Phase periods', fontsize=TITLE_FS)
+fig.tight_layout()
+# fig.savefig(path + f'analysis_phase_periods.png', dpi=300, bbox_inches='tight', format='png')
+
+
+ppp
 
 ### Null depth ###
 dm_null = outs_spectral[max_bright_idx, 0] / outs_spectral[max_bright_idx, 3]
 dm_null_noise = outs_spectral[max_bright_idx, 4] / outs_spectral[max_bright_idx, 3]
 topa_null = topa_outs_spectral[topa_max_bright_idx, 0] / topa_outs_spectral[topa_max_bright_idx, 3]
 topa_null_noise = topa_outs_spectral[topa_max_bright_idx, 4] / topa_outs_spectral[topa_max_bright_idx, 3]
+
 
 plt.figure(figsize=(FIGURE_WIDTH*1.2, FIGURE_WIDTH*1.2 / FIGURE_RATIO))
 plt.subplot(121)
@@ -329,8 +436,6 @@ plt.ylabel('Flux [a.u]', size=LABEL_FS)
 plt.title(f'Outputs at white fringe with TOPS scan', fontsize=TITLE_FS)
 plt.tight_layout()
 
-
-
 plt.figure(figsize=(FIGURE_WIDTH, FIGURE_WIDTH / FIGURE_RATIO))
 plt.semilogy(spectral_axs[0], dm_null, label='DM scan', c='blue')
 plt.semilogy(spectral_axs[0], topa_null, label='TOPA scan', c='orange')
@@ -347,75 +452,5 @@ plt.tight_layout()
 plt.savefig(path + f'analysis_null_depth.png', dpi=300, bbox_inches='tight', format='png')
 
 
-# fig, ax1 = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_WIDTH / FIGURE_RATIO))
-# line1, = ax1.plot(spectral_axs[0][px_min:px_max], dm_fit[0], color='tab:blue', label='DM scan')
-# line11, = ax1.plot(spectral_axs[0][px_min:px_max], dm_fit_norm[0], '--', color='tab:blue')
-# ax1.set_xlabel('Wavelength [nm]', size=LABEL_FS)
-# ax1.set_ylabel('DM phase slope [rad/nm]', size=LABEL_FS, color='tab:blue')
-# ax1.tick_params(axis='y', labelcolor='tab:blue', labelsize=TICK_FS)
-# ax1.tick_params(axis='x', labelsize=TICK_FS)
-# ax1.grid()
-
-# ax2 = ax1.twinx()
-# line2, = ax2.plot(spectral_axs[0][px_min:px_max], topa_fit[0], color='tab:orange', label='TOPA scan')
-# # line22, = ax2.plot(spectral_axs[0][px_min:px_max], topa_fit_norm[0], '--', color='tab:orange')
-# ax2.set_ylabel('TOPA phase slope [rad/nm]', size=LABEL_FS, color='tab:orange')
-# ax2.tick_params(axis='y', labelcolor='tab:orange', labelsize=TICK_FS)
-
-# ax1.legend(handles=[line1, line2], fontsize=LEGEND_FS, loc='best')
-# fig.suptitle(f'Phase slope', fontsize=TITLE_FS)
-# fig.tight_layout()
 
 
-fig, ax1 = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_WIDTH / FIGURE_RATIO))
-line1, = ax1.plot(spectral_axs[0][px_min:px_max], dm_period, color='tab:blue', label='DM scan')
-ax1.set_xlabel('Wavelength [nm]', size=LABEL_FS)
-ax1.set_ylabel(r'DM phase period [$\lambda$]', size=LABEL_FS, color='tab:blue')
-ax1.tick_params(axis='y', labelcolor='tab:blue', labelsize=TICK_FS)
-ax1.tick_params(axis='x', labelsize=TICK_FS)
-ax1.grid()
-
-ax2 = ax1.twinx()
-line2, = ax2.plot(spectral_axs[0][px_min:px_max], topa_period, color='tab:orange', label='TOPA scan')
-ax2.set_ylabel(r'TOPA phase period [$\lambda^2$]', size=LABEL_FS, color='tab:orange')
-ax2.tick_params(axis='y', labelcolor='tab:orange', labelsize=TICK_FS)
-
-ax1.legend(handles=[line1, line2], fontsize=LEGEND_FS, loc='best')
-fig.suptitle(f'Phase periods', fontsize=TITLE_FS)
-fig.tight_layout()
-fig.savefig(path + f'analysis_phase_periods.png', dpi=300, bbox_inches='tight', format='png')
-
-# fig, ax1 = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_WIDTH / FIGURE_RATIO))
-# line1, = ax1.plot(spectral_axs[0][px_min:px_max], 
-#                   (dm_fit[0] - dm_fit[0,0]) / dm_fit[0,0], 
-#                   color='tab:blue', label='DM scan')
-# line2, = ax1.plot(spectral_axs[0][px_min:px_max], 
-#                   (topa_fit[0] - topa_fit[0,0]) / topa_fit[0,0], 
-#                   color='tab:orange', label='TOPA scan')
-# ax1.set_xlabel('Wavelength [nm]', size=LABEL_FS)
-# ax1.set_ylabel('Relative variation [%]', size=LABEL_FS)
-# ax1.tick_params(axis='y', labelsize=TICK_FS)
-# ax1.tick_params(axis='x', labelsize=TICK_FS)
-# ax1.grid()
-
-# ax1.legend(handles=[line1, line2], fontsize=LEGEND_FS, loc='best')
-# fig.suptitle(f'Relative variation of phase slope', fontsize=TITLE_FS)
-# fig.tight_layout()
-
-
-# fig, ax1 = plt.subplots(figsize=(FIGURE_WIDTH, FIGURE_WIDTH / FIGURE_RATIO))
-# line1, = ax1.plot(spectral_axs[0][px_min:px_max], 
-#                   (dm_fit_norm[0] - dm_fit_norm[0,0]) / dm_fit_norm[0,0], 
-#                   color='tab:blue', label='DM scan')
-# line2, = ax1.plot(spectral_axs[0][px_min:px_max], 
-#                   (topa_fit_norm[0] - topa_fit_norm[0,0]) / topa_fit_norm[0,0], 
-#                   color='tab:orange', label='TOPA scan')
-# ax1.set_xlabel('Wavelength [nm]', size=LABEL_FS)
-# ax1.set_ylabel('Relative variation [%]', size=LABEL_FS)
-# ax1.tick_params(axis='y', labelsize=TICK_FS)
-# ax1.tick_params(axis='x', labelsize=TICK_FS)
-# ax1.grid()
-
-# ax1.legend(handles=[line1, line2], fontsize=LEGEND_FS, loc='best')
-# fig.suptitle(f'Relative variation of phase slope', fontsize=TITLE_FS)
-# fig.tight_layout()

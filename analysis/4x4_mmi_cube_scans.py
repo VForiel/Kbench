@@ -164,11 +164,11 @@ plt.tick_params(labelsize=14)
 plt.legend(loc='best', fontsize=16)
 plt.tight_layout()
 
-pickle_output_path = path + f'null_depth_results_{indx_labels[select].replace(" ", "")}bis.pkl'
-with open(pickle_output_path, 'wb') as f:
-    pickle.dump({'res': res, 'spectral_axs': spectral_axs}, f)
+# pickle_output_path = path + f'null_depth_results_{indx_labels[select].replace(" ", "")}bis.pkl'
+# with open(pickle_output_path, 'wb') as f:
+#     pickle.dump({'res': res, 'spectral_axs': spectral_axs}, f)
 
-print(f'Saved pickle file: {pickle_output_path}')
+# print(f'Saved pickle file: {pickle_output_path}')
 
 
 # plt.close('all')
@@ -239,21 +239,21 @@ for ax in axs:
 fig.tight_layout()
 # fig.savefig(path2 + 'null_depth_comparison_4T_2T_subfigs.png', dpi=300)
 
-height = 8
-fig, axs = plt.subplots(1, 1, figsize=(height*ratio, height))
-for k in range(len(boundaries)):
-    axs.semilogy(spectral_axs_1[0][mask_wl1], moving_average(res_1[k][0][0][mask_wl1], window_size), label=f'Double null depth ({boundaries[k][0]}-{boundaries[k][1]} nm)', lw=3)
+# height = 8
+# fig, axs = plt.subplots(1, 1, figsize=(height*ratio, height))
 # for k in range(len(boundaries)):
-#     axs.semilogy(spectral_axs_2[0][mask_wl2], moving_average(res_2[k][0][0][mask_wl2], window_size), label=f'Bracewell null depth ({boundaries[k][0]}-{boundaries[k][1]} nm)', lw=3-1.5*k)
-axs.set_ylabel('Null depth', fontsize=16)
-axs.grid(True)
-axs.legend(loc='best', fontsize=14)
-axs.semilogy(spectral_axs_1[-1][mask_wl1], moving_average(res_1[0][1][mask_wl1], window_size), 'k--', label='Detection limit', alpha=0.8)
-# axs.semilogy(spectral_axs_2[-1][mask_wl2], moving_average(res_2[0][1][mask_wl2], window_size), '-.', color='grey', label='Detection limit (Bracewell)', alpha=0.8)
-axs.set_xlabel('Wavelength (nm)', fontsize=16)
-axs.legend(loc='best', fontsize=14, ncol=2)
-axs.tick_params(labelsize=14)
-axs.set_ylim(5e-5, 1.0)
+#     axs.semilogy(spectral_axs_1[0][mask_wl1], moving_average(res_1[k][0][0][mask_wl1], window_size), label=f'Double null depth ({boundaries[k][0]}-{boundaries[k][1]} nm)', lw=3)
+# # for k in range(len(boundaries)):
+# #     axs.semilogy(spectral_axs_2[0][mask_wl2], moving_average(res_2[k][0][0][mask_wl2], window_size), label=f'Bracewell null depth ({boundaries[k][0]}-{boundaries[k][1]} nm)', lw=3-1.5*k)
+# axs.set_ylabel('Null depth', fontsize=16)
+# axs.grid(True)
+# axs.legend(loc='best', fontsize=14)
+# axs.semilogy(spectral_axs_1[-1][mask_wl1], moving_average(res_1[0][1][mask_wl1], window_size), 'k--', label='Detection limit', alpha=0.8)
+# # axs.semilogy(spectral_axs_2[-1][mask_wl2], moving_average(res_2[0][1][mask_wl2], window_size), '-.', color='grey', label='Detection limit (Bracewell)', alpha=0.8)
+# axs.set_xlabel('Wavelength (nm)', fontsize=16)
+# axs.legend(loc='best', fontsize=14, ncol=2)
+# axs.tick_params(labelsize=14)
+# axs.set_ylim(5e-5, 1.0)
 
-fig.tight_layout()
-# fig.savefig(path2 + 'null_depth_comparison_4T.png', dpi=300)
+# fig.tight_layout()
+# # fig.savefig(path2 + 'null_depth_comparison_4T.png', dpi=300)
